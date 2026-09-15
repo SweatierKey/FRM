@@ -178,10 +178,17 @@ OHS 12c:
   httpd process belonging to the instance before reporting RUNNING.
 
 Default compact output:
-  ohs_jrv                  RUNNING  pid=3217 httpd=6
+  ohs_jrv                  RUNNING  pid=3217 httpd=6 uptime=4m37s
   ohs_legacy_711           DOWN     opmn=Down
 
+`uptime` is the elapsed runtime of the OHS master process identified by PID,
+not the age of the systemd/SysV wrapper service. This makes a successful
+restart visible immediately even when systemd reports `active (exited)`.
+
 Structured formats:
+  JSON adds `uptime` and numeric `uptime_seconds`.
+  TSV adds `uptime` and `uptime_seconds` columns.
+
   frm status --json
   frm status --tsv
 

@@ -118,8 +118,8 @@ frm restart --state RUNNING 'ohs_*'
 Example compact status:
 
 ```text
-ohs_ipf_11119            RUNNING  pid=3386 opmn=Alive
-ohs_jib_11119            RUNNING  pid=3213 opmn=Alive
+ohs_ipf_11119            RUNNING  pid=3386 opmn=Alive uptime=2h14m
+ohs_jib_11119            RUNNING  pid=3213 opmn=Alive uptime=47m8s
 ohs_jib_711              DOWN     opmn=Down
 ohs_nav_711              DOWN     opmn not running
 ```
@@ -127,9 +127,9 @@ ohs_nav_711              DOWN     opmn not running
 And on an OHS 12c layout:
 
 ```text
-ohs_ais                  RUNNING  pid=3208 httpd=6
-ohs_jrv                  RUNNING  pid=3217 httpd=6
-ohs_lfr7                 RUNNING  pid=2852112 httpd=6
+ohs_ais                  RUNNING  pid=3208 httpd=6 uptime=132d4h
+ohs_jrv                  RUNNING  pid=3217 httpd=6 uptime=4m37s
+ohs_lfr7                 RUNNING  pid=2852112 httpd=6 uptime=13d6h
 ```
 
 ## Lifecycle
@@ -291,6 +291,11 @@ real OHS `httpd` process belonging to the instance.
 For 11g, OPMN `Alive` / `Down` is parsed directly. Process fallback also understands the
 `httpd.worker` layout.
 
+For every RUNNING/WARNING instance with a real OHS PID, FRM reads the elapsed
+process time from that master PID and exposes it as `uptime`. This is deliberately
+independent from systemd's service age, because SysV-generated units commonly remain
+`active (exited)` long after the actual OHS process has been restarted.
+
 ## Structured output
 
 JSON:
@@ -307,6 +312,8 @@ frm status --json
     "backend": "systemd",
     "pid": "3217",
     "httpd_count": "6",
+    "uptime": "4m37s",
+    "uptime_seconds": 277,
     "detail": "pid=3217 httpd=6"
   }
 ]
@@ -553,7 +560,7 @@ make test
 make compat       # rerun the Bash suite with BASH_COMPAT=4.2
 ```
 
-The current suite contains 52 Bash regression tests plus the end-to-end mock demo
+The current suite contains 55 Bash regression tests plus the end-to-end mock demo
 integration. Tests are split by macro area under `tests/` (`core`, `status`,
 `lifecycle`, `state`) and orchestrated by the small `tests/test.sh` runner. Current
 coverage includes:

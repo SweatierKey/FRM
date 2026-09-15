@@ -210,6 +210,36 @@ PS
     [[ "$(instance_httpd_info ohs_lfi7_11119)" == "9293 3" ]]
 )
 
+
+test_uptime_formatting() (
+    source "$FRM"
+    [[ "$(format_uptime 37)" == "37s" ]]
+    [[ "$(format_uptime 277)" == "4m37s" ]]
+    [[ "$(format_uptime 11520)" == "3h12m" ]]
+    [[ "$(format_uptime 11404800)" == "132d0h" ]]
+)
+
+test_process_uptime_uses_master_pid() (
+    source "$FRM"
+    ps() {
+        [[ "$*" == *"-o etimes="* && "$*" == *"-p 4242"* ]] || return 1
+        printf '  277\n'
+    }
+    [[ "$(process_uptime_seconds 4242)" == "277" ]]
+)
+
+test_status_table_includes_uptime() (
+    source "$FRM"
+    local out
+    FRM_COLOR=never
+    STATUS_STATE=RUNNING
+    STATUS_DETAIL='pid=42 opmn=Alive'
+    STATUS_UPTIME='4m37s'
+    out="$(print_status_table_row ohs_a)"
+    [[ "$out" == *"ohs_a"* ]]
+    [[ "$out" == *"uptime=4m37s"* ]]
+)
+
 test_status_json() (
     source "$FRM"
     local tmp out
@@ -227,10 +257,12 @@ test_status_json() (
         STATUS_BACKEND=opmn
         STATUS_PID=42
         STATUS_PROCESS_COUNT=''
+        STATUS_UPTIME='4m37s'
+        STATUS_UPTIME_SECONDS=277
     }
     FRM_STATUS_FORMAT=json
     out="$(status_instances ohs_a)"
-    [[ "$out" == '[{"instance":"ohs_a","state":"RUNNING","backend":"opmn","pid":"42","httpd_count":"","detail":"pid=42 opmn=Alive"}]' ]]
+    [[ "$out" == '[{"instance":"ohs_a","state":"RUNNING","backend":"opmn","pid":"42","httpd_count":"","uptime":"4m37s","uptime_seconds":277,"detail":"pid=42 opmn=Alive"}]' ]]
 )
 
 run_test 'plain list avoids status backends' test_plain_list_does_not_collect_status
@@ -247,4 +279,7 @@ run_test 'OPMN not-running parser' test_opmn_not_running
 run_test '12c httpd process detection' test_process_detection_12c
 run_test '12c process detection forces wide ps output' test_process_detection_12c_forces_wide_ps
 run_test '11g httpd.worker process detection' test_process_detection_11g
+run_test 'uptime formatting' test_uptime_formatting
+run_test 'process uptime uses master pid' test_process_uptime_uses_master_pid
+run_test 'status table includes uptime' test_status_table_includes_uptime
 run_test 'JSON status output' test_status_json

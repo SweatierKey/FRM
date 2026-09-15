@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.3 - 2026-09-16
+
+### Added
+
+- Add OHS master-process uptime to compact status output, for example
+  `uptime=4m37s`, using the elapsed runtime of the resolved OHS PID rather than
+  systemd/SysV service age. This makes successful and failed restarts visible
+  without manually comparing old/new PIDs.
+- Add `uptime` and numeric `uptime_seconds` to JSON output and equivalent
+  columns to TSV output.
+- Include the new process uptime in the post-start lifecycle success message.
+
+### Tests
+
+- Add process elapsed-time lookup, human duration formatting and compact status
+  rendering regression tests.
+- Regression suite: 55 tests, also exercised with `BASH_COMPAT=4.2`.
+
 ## 0.1.2 - 2026-09-16
 
 ### Fixed

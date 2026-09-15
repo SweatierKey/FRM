@@ -88,6 +88,59 @@ set_process_status() {
     return 1
 }
 
+process_uptime_seconds() {
+    local pid="$1"
+    local value=""
+
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+
+    value="$(ps -o etimes= -p "$pid" 2>/dev/null | awk 'NR == 1 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); print; exit }')"
+    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+
+    printf '%s\n' "$value"
+}
+
+format_uptime() {
+    local total="${1:-}"
+    local days hours minutes seconds
+
+    [[ "$total" =~ ^[0-9]+$ ]] || return 1
+
+    days=$((total / 86400))
+    hours=$(((total % 86400) / 3600))
+    minutes=$(((total % 3600) / 60))
+    seconds=$((total % 60))
+
+    if (( days > 0 )); then
+        printf '%dd%dh' "$days" "$hours"
+    elif (( hours > 0 )); then
+        printf '%dh%dm' "$hours" "$minutes"
+    elif (( minutes > 0 )); then
+        printf '%dm%ds' "$minutes" "$seconds"
+    else
+        printf '%ds' "$seconds"
+    fi
+}
+
+enrich_status_uptime() {
+    local seconds=""
+
+    STATUS_UPTIME_SECONDS=""
+    STATUS_UPTIME=""
+
+    case "$STATUS_STATE" in
+        RUNNING|WARNING) ;;
+        *) return 0 ;;
+    esac
+
+    [[ "$STATUS_PID" =~ ^[0-9]+$ ]] || return 0
+
+    if seconds="$(process_uptime_seconds "$STATUS_PID")"; then
+        STATUS_UPTIME_SECONDS="$seconds"
+        STATUS_UPTIME="$(format_uptime "$seconds")"
+    fi
+}
+
 ###############################################################################
 # Status parsing
 ###############################################################################
@@ -98,6 +151,8 @@ reset_status_result() {
     STATUS_BACKEND="none"
     STATUS_PID=""
     STATUS_PROCESS_COUNT=""
+    STATUS_UPTIME_SECONDS=""
+    STATUS_UPTIME=""
     STATUS_RAW=""
     STATUS_RC=0
 }
@@ -309,7 +364,8 @@ collect_status() {
         fi
     fi
 
-    log debug "Derived status for $instance: $STATUS_STATE${STATUS_DETAIL:+ ($STATUS_DETAIL)}"
+    enrich_status_uptime
+    log debug "Derived status for $instance: $STATUS_STATE${STATUS_DETAIL:+ ($STATUS_DETAIL)}${STATUS_UPTIME:+ uptime=$STATUS_UPTIME}"
 }
 
 ###############################################################################
@@ -330,25 +386,38 @@ print_status_table_row() {
     local level
     local line
 
+    local detail="$STATUS_DETAIL"
+
     level="$(status_level "$STATUS_STATE")"
-    printf -v line '%-24s %-8s %s' "$instance" "$STATUS_STATE" "$STATUS_DETAIL"
+    if [[ -n "$STATUS_UPTIME" ]]; then
+        detail="${detail}${detail:+ }uptime=$STATUS_UPTIME"
+    fi
+    printf -v line '%-24s %-8s %s' "$instance" "$STATUS_STATE" "$detail"
     log "$level" "$line"
 }
 
 print_status_tsv_row() {
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$1" "$STATUS_STATE" "$STATUS_BACKEND" "$STATUS_PID" \
-        "$STATUS_PROCESS_COUNT" "$STATUS_DETAIL"
+        "$STATUS_PROCESS_COUNT" "$STATUS_UPTIME" "$STATUS_UPTIME_SECONDS" "$STATUS_DETAIL"
 }
 
 print_status_json_object() {
     local instance="$1"
-    printf '{"instance":"%s","state":"%s","backend":"%s","pid":"%s","httpd_count":"%s","detail":"%s"}' \
+    local uptime_seconds_json=null
+
+    if [[ "$STATUS_UPTIME_SECONDS" =~ ^[0-9]+$ ]]; then
+        uptime_seconds_json="$STATUS_UPTIME_SECONDS"
+    fi
+
+    printf '{"instance":"%s","state":"%s","backend":"%s","pid":"%s","httpd_count":"%s","uptime":"%s","uptime_seconds":%s,"detail":"%s"}' \
         "$(json_escape "$instance")" \
         "$(json_escape "$STATUS_STATE")" \
         "$(json_escape "$STATUS_BACKEND")" \
         "$(json_escape "$STATUS_PID")" \
         "$(json_escape "$STATUS_PROCESS_COUNT")" \
+        "$(json_escape "$STATUS_UPTIME")" \
+        "$uptime_seconds_json" \
         "$(json_escape "$STATUS_DETAIL")"
 }
 

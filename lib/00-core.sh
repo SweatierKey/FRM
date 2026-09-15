@@ -1,6 +1,6 @@
 set -o pipefail
 
-FRM_VERSION="0.1.2"
+FRM_VERSION="0.1.3"
 
 ###############################################################################
 # Defaults / environment
@@ -63,6 +63,8 @@ STATUS_DETAIL=""
 STATUS_BACKEND=""
 STATUS_PID=""
 STATUS_PROCESS_COUNT=""
+STATUS_UPTIME_SECONDS=""
+STATUS_UPTIME=""
 STATUS_RAW=""
 STATUS_RC=0
 

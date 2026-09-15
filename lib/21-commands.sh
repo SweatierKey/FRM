@@ -61,7 +61,7 @@ status_instances() {
     log debug "Checking status of ${#SELECTED_INSTANCES[@]} selected instance(s)"
 
     [[ "$FRM_STATUS_FORMAT" == "json" ]] && printf '['
-    [[ "$FRM_STATUS_FORMAT" == "tsv" ]] && printf 'instance\tstate\tbackend\tpid\thttpd_count\tdetail\n'
+    [[ "$FRM_STATUS_FORMAT" == "tsv" ]] && printf 'instance\tstate\tbackend\tpid\thttpd_count\tuptime\tuptime_seconds\tdetail\n'
 
     for instance in "${SELECTED_INSTANCES[@]}"; do
         collect_status "$instance" "$FRM_VERBOSE_STATUS"

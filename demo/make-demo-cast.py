@@ -149,6 +149,17 @@ esac
 set -u
 root="$FRM_INSTANCES_DIR"
 state="$FRM_DEMO_STATE_DIR"
+
+if [[ "$*" == *"-o etimes="* ]]; then
+  case "$*" in
+    *"-p 4101"*) echo "   7325" ;;
+    *"-p 5101"*) echo "    277" ;;
+    *"-p 5201"*) echo "      8" ;;
+    *) exit 1 ;;
+  esac
+  exit 0
+fi
+
 if grep -q running "$state/ohs_portal"; then
   echo "5101 1 httpd /opt/oracle/ohs/bin/httpd -d $root/ohs_portal/config/fmwconfig/components/OHS/instances/ohs_portal -k start"
   echo "5102 5101 httpd /opt/oracle/ohs/bin/httpd -d $root/ohs_portal/config/fmwconfig/components/OHS/instances/ohs_portal -k start"
@@ -221,19 +232,19 @@ def main():
 
         scenes = [
             ("frm list --long", [str(FRM), "list", "--long"], None, ["ohs_api", "ohs_legacy_11119", "ohs_portal"]),
-            ("frm status --summary", [str(FRM), "status", "--summary"], None, ["ohs_api", "DOWN", "running=2", "down=1"]),
+            ("frm status --summary", [str(FRM), "status", "--summary"], None, ["ohs_api", "DOWN", "uptime=", "running=2", "down=1"]),
             ("frm ports 'ohs_*'", [str(FRM), "ports", "ohs_*"], None, ["https:8443,http:7777", "8080", "8090"]),
             ("frm plan restart 'ohs_*'", [str(FRM), "plan", "restart", "ohs_*"], None, ["systemctl stop ohs_portal", "opmnctl stopall"]),
             ("frm --dry-run restart ohs_portal", [str(FRM), "--dry-run", "restart", "ohs_portal"], None, ["systemctl stop ohs_portal", "systemctl start ohs_portal"]),
             ("frm --dry-run restart --state RUNNING 'ohs_*'", [str(FRM), "--dry-run", "restart", "--state", "RUNNING", "ohs_*"], None, ["ohs_legacy_11119", "ohs_portal"]),
             ("frm start ohs_api", [str(FRM), "start", "ohs_api"], None, ["ohs_api is RUNNING", "pid=5201"]),
-            ("frm status --json ohs_api", [str(FRM), "status", "--json", "ohs_api"], None, ['"state":"RUNNING"', '"backend":"systemd"']),
+            ("frm status --json ohs_api", [str(FRM), "status", "--json", "ohs_api"], None, ['"state":"RUNNING"', '"backend":"systemd"', '"uptime_seconds":8']),
             ("frm help status", [str(FRM), "help", "status"], 16, ["STATUS", "FRM chooses the best available status backend"]),
         ]
 
         events = []
         t = 0.2
-        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.2\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
+        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.3\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
 
         for idx, (display, argv, max_lines, expected) in enumerate(scenes):
             if idx in {2, 5}:

@@ -420,7 +420,7 @@ start_one() {
     if ! bool_true "$FRM_DRY_RUN"; then
         wait_for_state "$instance" RUNNING || return $?
         collect_status "$instance" false
-        log success "$instance is RUNNING${STATUS_PID:+ pid=$STATUS_PID}"
+        log success "$instance is RUNNING${STATUS_PID:+ pid=$STATUS_PID}${STATUS_UPTIME:+ uptime=$STATUS_UPTIME}"
     fi
 }
 
