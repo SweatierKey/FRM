@@ -48,6 +48,9 @@ jobs:
           check lib/50-cli.sh bc3e76900e1bfc92945860eab50ed8b9f4fca4fb
           check tests/lifecycle.sh 8510faf3dbf08d850d3f57602e9880f52ac0a3b9
 
+      - name: Install Pillow
+        run: python3 -m pip install pillow
+
       - name: Render deterministic README demo
         run: python3 demo/render_cast.py demo/frm-demo.cast assets/demo.gif
 
