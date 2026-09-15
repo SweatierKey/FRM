@@ -177,6 +177,10 @@ parse_status_args() {
             --tsv) FRM_STATUS_FORMAT=tsv ;;
             --summary) FRM_STATUS_SUMMARY=true ;;
             --verbose|-v) FRM_VERBOSE_STATUS=true ;;
+            --debug|-d)
+                FRM_DEBUG=true
+                FRM_VERBOSE_STATUS=true
+                ;;
             --state) [[ $# -ge 2 ]] || { log error "--state requires a state"; return "$EX_GENERAL"; }; add_state_filter "$2" || return $?; shift ;;
             --state=*) add_state_filter "${1#*=}" || return $? ;;
             --all) STATUS_SELECTORS=(--all) ;;
@@ -343,6 +347,7 @@ parse_plan_args() {
 main() {
     local command
     local rc=0
+    local debug_info_shown=false
 
     # Compatibility syntax: frm debug status ...
     if [[ "${1:-}" == "debug" ]]; then
@@ -367,6 +372,7 @@ main() {
 
     if bool_true "$FRM_DEBUG"; then
         debug_info || return $?
+        debug_info_shown=true
     fi
 
     command="${1:-}"
@@ -381,12 +387,16 @@ main() {
             ;;
 
         status)
-            if bool_true "$FRM_DEBUG"; then
-                FRM_VERBOSE_STATUS=true
-            fi
             parse_status_args "$@"; rc=$?
             (( rc == 10 )) && return 0
             (( rc != 0 )) && return "$rc"
+            if bool_true "$FRM_DEBUG"; then
+                FRM_VERBOSE_STATUS=true
+                if ! bool_true "$debug_info_shown"; then
+                    debug_info || return $?
+                    debug_info_shown=true
+                fi
+            fi
             status_instances "${STATUS_SELECTORS[@]}"
             ;;
 

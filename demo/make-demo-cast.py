@@ -222,7 +222,7 @@ def main():
 
         events = []
         t = 0.2
-        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.0\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
+        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.1\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
 
         for idx, (display, argv, max_lines, expected) in enumerate(scenes):
             if idx in {2, 5}:

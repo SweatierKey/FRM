@@ -1,5 +1,5 @@
 {"version":2,"width":105,"height":28,"timestamp":1789507200,"env":{"SHELL":"/bin/bash","TERM":"xterm-256color"},"title":"FRM - Fronten Runtime Manager"}
-[0.2,"o","\u001b[1;36mFRM 0.1.0\u001b[0m  Fronten Runtime Manager\r\n\r\n"]
+[0.2,"o","\u001b[1;36mFRM 0.1.1\u001b[0m  Fronten Runtime Manager\r\n\r\n"]
 [0.65,"o","\u001b[1;35m$\u001b[0m frm list --long\r\n"]
 [1.1,"o","ohs_api                  12c          systemd    /u01/app/oracle/admin/ohs_api\r\nohs_legacy_11119         11g-opmn     opmn       /u01/app/oracle/admin/ohs_legacy_11119\r\nohs_portal               12c          systemd    /u01/app/oracle/admin/ohs_portal\r\n"]
 [2.75,"o","\u001b[1;35m$\u001b[0m frm status --summary\r\n"]

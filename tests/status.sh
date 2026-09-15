@@ -90,6 +90,18 @@ test_debug_status_enables_verbose() (
     main --debug status >/dev/null 2>&1
 )
 
+test_status_debug_option_after_command() (
+    source "$FRM"
+    local seen_debug=false seen_verbose=false
+    FRM_HANDLERS_FILE=/nonexistent
+    debug_info() { seen_debug=true; return 0; }
+    status_instances() {
+        bool_true "$FRM_VERBOSE_STATUS" && seen_verbose=true
+        [[ "$seen_debug" == true && "$seen_verbose" == true ]]
+    }
+    main status --debug >/dev/null 2>&1
+)
+
 test_status_exit_code_when_down() (
     source "$FRM"
     local tmp rc
@@ -156,6 +168,33 @@ PS
     [[ "$(instance_httpd_info ohs_ais)" == "3208 3" ]]
 )
 
+test_process_detection_12c_forces_wide_ps() (
+    source "$FRM"
+    FRM_INSTANCES_DIR=/u01/app/oracle/admin
+    ps() {
+        local arg wide=false
+        for arg in "$@"; do
+            [[ "$arg" == "-ww" ]] && wide=true
+        done
+
+        if [[ "$wide" == true ]]; then
+            cat <<'PS'
+7062 1 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01/app/oracle/admin/ohs_cpf_12/config/fmwconfig/components/OHS/instances/ohs_cpf_12 -k start
+7070 7062 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01/app/oracle/admin/ohs_cpf_12/config/fmwconfig/components/OHS/instances/ohs_cpf_12 -k start
+7078 7062 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01/app/oracle/admin/ohs_cpf_12/config/fmwconfig/components/OHS/instances/ohs_cpf_12 -k start
+PS
+        else
+            # Simulate RHEL7/procps output truncated before the instance path.
+            cat <<'PS'
+7062 1 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01
+7070 7062 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01
+7078 7062 httpd /u01/app/oracle/product/fmw_12/wlserver/../ohs/bin/httpd -DOHS_MPM_EVENT -d /u01
+PS
+        fi
+    }
+    [[ "$(instance_httpd_info ohs_cpf_12)" == "7062 3" ]]
+)
+
 test_process_detection_11g() (
     source "$FRM"
     FRM_INSTANCES_DIR=/u01/app/oracle/admin
@@ -200,10 +239,12 @@ run_test 'OPMN ports parser' test_opmn_ports_parser
 run_test '12c Listen ports parser' test_12c_listen_ports_parser
 run_test 'FORCE_TTY override' test_force_tty_override
 run_test 'debug status enables verbose native output' test_debug_status_enables_verbose
+run_test 'status accepts --debug after command' test_status_debug_option_after_command
 run_test 'status returns state exit code for DOWN' test_status_exit_code_when_down
 run_test 'OPMN Alive parser' test_opmn_alive
 run_test 'OPMN Down parser' test_opmn_down
 run_test 'OPMN not-running parser' test_opmn_not_running
 run_test '12c httpd process detection' test_process_detection_12c
+run_test '12c process detection forces wide ps output' test_process_detection_12c_forces_wide_ps
 run_test '11g httpd.worker process detection' test_process_detection_11g
 run_test 'JSON status output' test_status_json

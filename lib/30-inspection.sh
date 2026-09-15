@@ -26,7 +26,7 @@ processes_instances() {
         printf '\n'
         printf '  %-10s %-8s %-8s %-12s %s\n' "USER" "PID" "PPID" "ELAPSED" "COMMAND"
 
-        ps -eo user=,pid=,ppid=,etime=,args= 2>/dev/null |
+        ps -ww -eo user=,pid=,ppid=,etime=,args= 2>/dev/null |
             awk -v master="$master" -v instance_path="$path" '
                 {
                     user=$1

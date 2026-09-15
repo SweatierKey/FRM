@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.1 - 2026-09-16
+
+### Fixed
+
+- Force unlimited-width `ps` output when attributing OHS `httpd`/`httpd.worker`
+  processes. On RHEL7/procps, piped `ps` output could be truncated before the
+  `/u01/app/oracle/admin/<instance>/...` argument, causing a running OHS 12c
+  instance to be reported as `WARNING systemd active but httpd not found`.
+- Apply the same wide-process snapshot to `frm processes` so status and process
+  inspection use identical attribution semantics.
+- Accept `frm status --debug` / `frm status -d` in addition to the existing
+  `frm --debug status` and `frm debug status` forms.
+
+### Tests
+
+- Add an RHEL7-style process truncation regression test.
+- Add command-local `status --debug` regression coverage.
+- Regression suite: 43 tests, also exercised with `BASH_COMPAT=4.2`.
+
 ## 0.1.0 - 2026-09-15
 
 Initial FRM release derived from the original `manage_instances_runtime.sh` operational

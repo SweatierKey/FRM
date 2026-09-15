@@ -71,7 +71,7 @@ _frm() {
             fi
             ;;
         status)
-            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --json --tsv --summary --verbose --all --help" "$cur"
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --json --tsv --summary --verbose --debug --all --help" "$cur"
             ;;
         list)
             _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --long --json --all --help" "$cur"

@@ -43,6 +43,7 @@ UNKNOWN   state cannot be established safely
 - Discovers OHS instances under `/u01/app/oracle/admin` or another configured root.
 - Supports mixed **OHS 11g / OPMN** and **OHS 12c / systemd / SysV** estates.
 - Confirms 12c runtime state against real `httpd` processes.
+- Uses wide `ps` snapshots so long OHS command lines remain attributable on RHEL7/procps.
 - Resolves 11g `httpd.worker` masters even when the instance path is only visible in
   their child logging processes.
 - Select one instance, several instances, or quoted glob patterns.
@@ -312,6 +313,7 @@ Show the native status command plus the normalized result:
 
 ```bash
 frm status --verbose ohs_jrv
+frm status --debug ohs_jrv      # debug can also follow the status command
 ```
 
 Enable full FRM diagnostics as well:
@@ -517,7 +519,7 @@ make test
 make compat       # rerun the Bash suite with BASH_COMPAT=4.2
 ```
 
-The current suite contains 41 Bash regression tests plus the end-to-end mock demo
+The current suite contains 43 Bash regression tests plus the end-to-end mock demo
 integration. Tests are split by macro area under `tests/` (`core`, `status`,
 `lifecycle`, `state`) and orchestrated by the small `tests/test.sh` runner. Current
 coverage includes:

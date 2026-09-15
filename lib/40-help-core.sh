@@ -67,7 +67,7 @@ COMMANDS
   list [--long] [--json] [selectors...]
       List detected OHS instances. --long adds family/backend/path.
 
-  status [--json|--tsv] [--summary] [--verbose] [selectors...]
+  status [--json|--tsv] [--summary] [--verbose] [--debug] [selectors...]
       Show current runtime state. Table output is compact by default.
       --verbose emits native backend output before the derived state.
 
@@ -188,6 +188,7 @@ Structured formats:
 Verbose native output:
   frm status --verbose ohs_jrv
   frm --debug status       # native output + discovery/debug diagnostics
+  frm status --debug       # equivalent command-local form
 
 Summary:
   frm status --summary

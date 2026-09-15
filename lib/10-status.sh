@@ -5,7 +5,9 @@ instance_httpd_info() {
     local instance="$1"
     local instance_path="$FRM_INSTANCES_DIR/$instance/"
 
-    ps -eo pid=,ppid=,comm=,args= 2>/dev/null |
+    # RHEL7/procps may truncate args to the display width when stdout is a pipe.
+    # The OHS instance path can appear after column 80, so force unlimited width.
+    ps -ww -eo pid=,ppid=,comm=,args= 2>/dev/null |
         awk -v instance_path="$instance_path" '
             {
                 pid=$1
