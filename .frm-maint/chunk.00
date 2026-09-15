@@ -1,0 +1,57 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 5c9c633..f963fd3 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,24 @@
+ # Changelog
+ 
++## 0.1.1 - 2026-09-16
++
++### Fixed
++
++- Force unlimited-width `ps` output when attributing OHS `httpd`/`httpd.worker`
++  processes. On RHEL7/procps, piped `ps` output could be truncated before the
++  `/u01/app/oracle/admin/<instance>/...` argument, causing a running OHS 12c
++  instance to be reported as `WARNING systemd active but httpd not found`.
++- Apply the same wide-process snapshot to `frm processes` so status and process
++  inspection use identical attribution semantics.
++- Accept `frm status --debug` / `frm status -d` in addition to the existing
++  `frm --debug status` and `frm debug status` forms.
++
++### Tests
++
++- Add an RHEL7-style process truncation regression test.
++- Add command-local `status --debug` regression coverage.
++- Regression suite: 43 tests, also exercised with `BASH_COMPAT=4.2`.
++
+ ## 0.1.0 - 2026-09-15
+ 
+ Initial FRM release derived from the original `manage_instances_runtime.sh` operational
+diff --git a/README.md b/README.md
+index 86ca88e..6804473 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,7 @@ UNKNOWN   state cannot be established safely
+ - Discovers OHS instances under `/u01/app/oracle/admin` or another configured root.
+ - Supports mixed **OHS 11g / OPMN** and **OHS 12c / systemd / SysV** estates.
+ - Confirms 12c runtime state against real `httpd` processes.
++- Uses wide `ps` snapshots so long OHS command lines remain attributable on RHEL7/procps.
+ - Resolves 11g `httpd.worker` masters even when the instance path is only visible in
+   their child logging processes.
+ - Select one instance, several instances, or quoted glob patterns.
+@@ -312,6 +313,7 @@ Show the native status command plus the normalized result:
+ 
+ ```bash
+ frm status --verbose ohs_jrv
++frm status --debug ohs_jrv      # debug can also follow the status command
+ ```
+ 
+ Enable full FRM diagnostics as well:
+@@ -517,7 +519,7 @@ make test
+ make compat       # rerun the Bash suite with BASH_COMPAT=4.2
+ ```
+ 
+-The current suite contains 41 Bash regression tests plus the end-to-end mock demo
++The current suite contains 43 Bash regression tests plus the end-to-end mock demo
+ integration. Tests are split by macro area under `tests/` (`core`, `status`,
+ `lifecycle`, `state`) and orchestrated by the small `tests/test.sh` runner.
