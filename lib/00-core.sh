@@ -138,6 +138,9 @@ json_escape() {
     # backslashes differently from newer Bash releases.
     for (( i=0; i<${#s}; i++ )); do
         ch="${s:i:1}"
+        # SC1003 is a false positive here: the single-quoted Bash literal
+        # intentionally appends two backslashes for JSON escaping.
+        # shellcheck disable=SC1003
         case "$ch" in
             '"') out+='\"' ;;
             \\) out+='\\' ;;
@@ -342,6 +345,8 @@ matches_exclusion() {
     local pattern
 
     for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        # Intentional shell-pattern matching for --exclude.
+        # shellcheck disable=SC2053
         if [[ "$instance" == $pattern ]]; then
             return 0
         fi
@@ -457,6 +462,8 @@ build_selection() {
         matched=false
 
         for instance in "${detected_instances[@]}"; do
+            # Intentional shell-pattern matching for instance selectors.
+            # shellcheck disable=SC2053
             if [[ "$instance" == $selector ]]; then
                 matched=true
 

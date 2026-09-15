@@ -131,7 +131,11 @@ parse_global_options() {
                 ;;
             --help)
                 GLOBAL_REST=(help "${2:-overview}")
-                [[ $# -ge 2 ]] && shift 2 || shift
+                if (( $# >= 2 )); then
+                    shift 2
+                else
+                    shift
+                fi
                 GLOBAL_REST+=("$@")
                 return 0
                 ;;
