@@ -59,12 +59,23 @@ case "$action" in
     fi
     ;;
   start)
-    echo running > "$state_file"
-    echo "opmnctl start: opmn and managed processes started"
+    echo "opmnctl start: opmn started"
     ;;
-  stop)
+  startall)
+    echo running > "$state_file"
+    echo "opmnctl startall: OPMN and managed processes started"
+    ;;
+  stopall)
     echo down > "$state_file"
-    echo "opmnctl stop: opmn and managed processes stopped"
+    echo "opmnctl stopall: OPMN and managed processes stopped"
+    ;;
+  startproc)
+    echo running > "$state_file"
+    echo "opmnctl startproc: OHS managed processes started"
+    ;;
+  stopproc)
+    echo down > "$state_file"
+    echo "opmnctl stopproc: OHS managed processes stopped"
     ;;
   *)
     echo "unsupported mock action: $action" >&2
@@ -212,8 +223,8 @@ def main():
             ("frm list --long", [str(FRM), "list", "--long"], None, ["ohs_api", "ohs_legacy_11119", "ohs_portal"]),
             ("frm status --summary", [str(FRM), "status", "--summary"], None, ["ohs_api", "DOWN", "running=2", "down=1"]),
             ("frm ports 'ohs_*'", [str(FRM), "ports", "ohs_*"], None, ["https:8443,http:7777", "8080", "8090"]),
-            ("frm plan restart 'ohs_*'", [str(FRM), "plan", "restart", "ohs_*"], None, ["systemctl stop ohs_portal.service", "opmnctl stop"]),
-            ("frm --dry-run restart ohs_portal", [str(FRM), "--dry-run", "restart", "ohs_portal"], None, ["systemctl stop ohs_portal.service", "systemctl start ohs_portal.service"]),
+            ("frm plan restart 'ohs_*'", [str(FRM), "plan", "restart", "ohs_*"], None, ["systemctl stop ohs_portal", "opmnctl stopall"]),
+            ("frm --dry-run restart ohs_portal", [str(FRM), "--dry-run", "restart", "ohs_portal"], None, ["systemctl stop ohs_portal", "systemctl start ohs_portal"]),
             ("frm --dry-run restart --state RUNNING 'ohs_*'", [str(FRM), "--dry-run", "restart", "--state", "RUNNING", "ohs_*"], None, ["ohs_legacy_11119", "ohs_portal"]),
             ("frm start ohs_api", [str(FRM), "start", "ohs_api"], None, ["ohs_api is RUNNING", "pid=5201"]),
             ("frm status --json ohs_api", [str(FRM), "status", "--json", "ohs_api"], None, ['"state":"RUNNING"', '"backend":"systemd"']),
@@ -222,7 +233,7 @@ def main():
 
         events = []
         t = 0.2
-        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.1\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
+        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.2\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
 
         for idx, (display, argv, max_lines, expected) in enumerate(scenes):
             if idx in {2, 5}:
@@ -232,6 +243,7 @@ def main():
             events.append(cast_event(t, f"\x1b[1;35m$\x1b[0m {display}\r\n"))
             output, rc = run_command(argv, env, max_lines=max_lines)
             output = output.replace(str(admin), "/u01/app/oracle/admin")
+            output = output.replace(str(mockbin), "/usr/bin")
             for needle in expected:
                 if needle not in output:
                     raise RuntimeError(f"demo command {display!r} missing expected text {needle!r}:\n{output}")

@@ -33,7 +33,7 @@ _frm() {
     done
 
     if (( COMP_CWORD == 1 )); then
-        _frm_set_compreply "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --handlers --help --version" "$cur"
+        _frm_set_compreply "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --opmn-mode --handlers --help --version" "$cur"
         return 0
     fi
 
@@ -44,6 +44,11 @@ _frm() {
 
     if [[ "$prev" == "--sudo" ]]; then
         _frm_set_compreply "auto always never" "$cur"
+        return 0
+    fi
+
+    if [[ "$prev" == "--opmn-mode" ]]; then
+        _frm_set_compreply "auto all ohs" "$cur"
         return 0
     fi
 
@@ -67,7 +72,7 @@ _frm() {
             if [[ "$prev" == "--strategy" ]]; then
                 _frm_set_compreply "rolling all-at-once" "$cur"
             else
-                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --strategy --state --preserve-state --confirm --confirm-each --step --yes --all --help" "$cur"
+                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --strategy --opmn-mode --state --preserve-state --confirm --confirm-each --step --yes --all --help" "$cur"
             fi
             ;;
         status)
@@ -80,7 +85,7 @@ _frm() {
             _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --interval --no-clear --all --help" "$cur"
             ;;
         start|stop|shutdown|inspect|processes|ps|ports)
-            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --confirm --confirm-each --step --yes --all --help" "$cur"
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --opmn-mode --state --confirm --confirm-each --step --yes --all --help" "$cur"
             ;;
         *)
             _frm_set_compreply "$commands" "$cur"

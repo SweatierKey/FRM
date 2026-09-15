@@ -1,6 +1,6 @@
 set -o pipefail
 
-FRM_VERSION="0.1.1"
+FRM_VERSION="0.1.2"
 
 ###############################################################################
 # Defaults / environment
@@ -15,6 +15,7 @@ FRM_WAIT="${FRM_WAIT:-true}"
 FRM_TIMEOUT="${FRM_TIMEOUT:-60}"
 FRM_POLL_INTERVAL="${FRM_POLL_INTERVAL:-2}"
 FRM_SUDO="${FRM_SUDO:-auto}"                # auto|always|never
+FRM_OPMN_MODE="${FRM_OPMN_MODE:-auto}"        # auto|all|ohs
 FRM_INCLUDE_SKIPPED="${FRM_INCLUDE_SKIPPED:-false}"
 FRM_LOCK_FILE="${FRM_LOCK_FILE:-/tmp/frm-${UID}.lock}"
 FRM_HANDLERS_FILE="${FRM_HANDLERS_FILE:-${HOME:-}/.config/frm/handlers.sh}"
@@ -68,6 +69,8 @@ STATUS_RC=0
 # Action backend result globals.
 ACTION_BACKEND=""
 ACTION_DESCRIPTION=""
+declare -A OPMN_MODE_CACHE=()
+OPMN_RESOLVED_MODE=""
 
 # Exit codes.
 EX_OK=0
@@ -251,12 +254,16 @@ systemd_unit_exists() {
 sysv_script_path() {
     local instance="$1"
 
-    if [[ -x "/etc/init.d/$instance" ]]; then
+    # Lifecycle execution may be delegated to sudo even when the oracle
+    # account cannot execute the init script directly.  Presence is therefore
+    # enough for backend discovery; status collection separately checks direct
+    # executability before invoking a SysV script as the current user.
+    if [[ -f "/etc/init.d/$instance" ]]; then
         printf '%s\n' "/etc/init.d/$instance"
         return 0
     fi
 
-    if [[ -x "/etc/rc.d/init.d/$instance" ]]; then
+    if [[ -f "/etc/rc.d/init.d/$instance" ]]; then
         printf '%s\n' "/etc/rc.d/init.d/$instance"
         return 0
     fi

@@ -120,6 +120,15 @@ parse_global_options() {
                 FRM_SUDO="${1#*=}"
                 shift
                 ;;
+            --opmn-mode)
+                [[ $# -ge 2 ]] || { log error "--opmn-mode requires auto|all|ohs"; return "$EX_GENERAL"; }
+                FRM_OPMN_MODE="$2"
+                shift 2
+                ;;
+            --opmn-mode=*)
+                FRM_OPMN_MODE="${1#*=}"
+                shift
+                ;;
             --handlers)
                 [[ $# -ge 2 ]] || { log error "--handlers requires a path"; return "$EX_GENERAL"; }
                 FRM_HANDLERS_FILE="$2"
@@ -231,6 +240,14 @@ parse_lifecycle_args() {
             --strategy=*)
                 FRM_RESTART_STRATEGY="${1#*=}"
                 ;;
+            --opmn-mode)
+                [[ $# -ge 2 ]] || { log error "--opmn-mode requires auto|all|ohs"; return "$EX_GENERAL"; }
+                FRM_OPMN_MODE="$2"
+                shift
+                ;;
+            --opmn-mode=*)
+                FRM_OPMN_MODE="${1#*=}"
+                ;;
             --confirm)
                 FRM_CONFIRM=true
                 ;;
@@ -325,6 +342,14 @@ parse_plan_args() {
 
     while (( $# )); do
         case "$1" in
+            --opmn-mode)
+                [[ $# -ge 2 ]] || { log error "--opmn-mode requires auto|all|ohs"; return "$EX_GENERAL"; }
+                FRM_OPMN_MODE="$2"
+                shift
+                ;;
+            --opmn-mode=*)
+                FRM_OPMN_MODE="${1#*=}"
+                ;;
             --state)
                 [[ $# -ge 2 ]] || { log error "--state requires a state"; return "$EX_GENERAL"; }
                 add_state_filter "$2" || return $?
@@ -366,6 +391,11 @@ main() {
     case "$FRM_SUDO" in
         auto|always|never) ;;
         *) log error "Invalid sudo mode: $FRM_SUDO"; return "$EX_GENERAL" ;;
+    esac
+
+    case "$FRM_OPMN_MODE" in
+        auto|all|ohs) ;;
+        *) log error "Invalid OPMN mode: $FRM_OPMN_MODE"; return "$EX_GENERAL" ;;
     esac
 
     load_handlers_file

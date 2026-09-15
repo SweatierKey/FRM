@@ -2,18 +2,20 @@
 
 test_lifecycle_confirmation_flags_parse() (
     source "$FRM"
-    parse_global_options --confirm-each --yes restart ohs_a
+    parse_global_options --confirm-each --yes --opmn-mode all restart ohs_a
     [[ "$FRM_CONFIRM_EACH" == true ]]
     [[ "$FRM_ASSUME_YES" == true ]]
+    [[ "$FRM_OPMN_MODE" == all ]]
     [[ "${GLOBAL_REST[*]}" == 'restart ohs_a' ]]
 
     FRM_CONFIRM=false
     FRM_CONFIRM_EACH=false
     FRM_ASSUME_YES=false
-    parse_lifecycle_args --confirm --step -y ohs_a
+    parse_lifecycle_args --confirm --step -y --opmn-mode ohs ohs_a
     [[ "$FRM_CONFIRM" == true ]]
     [[ "$FRM_CONFIRM_EACH" == true ]]
     [[ "$FRM_ASSUME_YES" == true ]]
+    [[ "$FRM_OPMN_MODE" == ohs ]]
     [[ "${LIFECYCLE_SELECTORS[*]}" == 'ohs_a' ]]
 )
 
@@ -145,10 +147,11 @@ test_systemd_action_backend() (
     systemd_unit_exists() { [[ "$1" == "ohs_a.service" ]]; }
     resolve_action_backend ohs_a stop
     [[ "$ACTION_BACKEND" == systemd ]]
-    [[ "$ACTION_DESCRIPTION" == 'systemctl stop ohs_a.service' ]]
+    [[ "$ACTION_DESCRIPTION" == '/usr/bin/systemctl stop ohs_a' || "$ACTION_DESCRIPTION" == '/bin/systemctl stop ohs_a' ]]
 )
 
 test_action_backend_opmn() (
+    FRM_OPMN_MODE=ohs
     source "$FRM"
     local tmp
     tmp="$(mktemp -d)"
@@ -159,7 +162,7 @@ test_action_backend_opmn() (
     chmod +x "$tmp/ohs_a/bin/opmnctl"
     resolve_action_backend ohs_a start
     [[ "$ACTION_BACKEND" == opmn ]]
-    [[ "$ACTION_DESCRIPTION" == "$tmp/ohs_a/bin/opmnctl start" ]]
+    [[ "$ACTION_DESCRIPTION" == "$tmp/ohs_a/bin/opmnctl startproc process-type=OHS" ]]
 )
 
 test_action_handler_precedence() (
@@ -177,6 +180,7 @@ test_action_handler_precedence() (
 )
 
 test_restart_dry_run_shows_stop_and_start() (
+    FRM_OPMN_MODE=ohs
     source "$FRM"
     local tmp out
     tmp="$(mktemp -d)"
@@ -191,8 +195,258 @@ test_restart_dry_run_shows_stop_and_start() (
     : > "$tmp/ohs_a/bin/opmnctl"
     chmod +x "$tmp/ohs_a/bin/opmnctl"
     out="$(restart_instances ohs_a)"
-    [[ "$out" == *"opmnctl stop"* ]]
-    [[ "$out" == *"opmnctl start"* ]]
+    [[ "$out" == *"opmnctl stopproc process-type=OHS"* ]]
+    [[ "$out" == *"opmnctl startproc process-type=OHS"* ]]
+)
+
+
+test_auto_sudo_checks_exact_command() (
+    source "$FRM"
+    FRM_SUDO=auto
+    local events=""
+
+    is_effective_root() { return 1; }
+    sudo() {
+        events+="sudo:$*;"
+        if [[ "$1" == -n && "$2" == -l ]]; then
+            [[ "$3 $4 $5" == '/usr/bin/systemctl stop ohs_a' ]]
+            return $?
+        fi
+        if [[ "$1" == -n ]]; then
+            return 0
+        fi
+        return 99
+    }
+
+    run_privileged /usr/bin/systemctl stop ohs_a
+    [[ "$events" == 'sudo:-n -l /usr/bin/systemctl stop ohs_a;sudo:-n /usr/bin/systemctl stop ohs_a;' ]]
+)
+
+test_auto_sudo_falls_back_to_direct_when_not_allowed() (
+    source "$FRM"
+    FRM_SUDO=auto
+    local tmp log cmd
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    cmd="$tmp/cmd"
+
+    cat > "$cmd" <<EOF
+#!/usr/bin/env bash
+printf 'direct:%s\n' "\$*" >> "$log"
+EOF
+    chmod +x "$cmd"
+
+    is_effective_root() { return 1; }
+    sudo() {
+        if [[ "$1" == -n && "$2" == -l ]]; then
+            return 1
+        fi
+        return 99
+    }
+
+    run_privileged "$cmd" alpha beta
+    [[ "$(cat "$log")" == 'direct:alpha beta' ]]
+)
+
+test_systemd_execute_uses_sudoers_compatible_command() (
+    source "$FRM"
+    FRM_DRY_RUN=false
+    local captured=""
+
+    systemd_unit_exists() { [[ "$1" == 'ohs_a.service' ]]; }
+    systemctl_path() { printf '%s\n' /usr/bin/systemctl; }
+    run_privileged() { captured="$*"; return 0; }
+
+    execute_action ohs_a stop
+    [[ "$captured" == '/usr/bin/systemctl stop ohs_a' ]]
+)
+
+test_opmn_stop_uses_stopproc_ohs() (
+    FRM_OPMN_MODE=ohs
+    source "$FRM"
+    local tmp log
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    FRM_INSTANCES_DIR="$tmp"
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+exit 0
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a stop
+    [[ "$(cat "$log")" == 'stopproc process-type=OHS' ]]
+)
+
+test_opmn_start_starts_daemon_when_needed() (
+    FRM_OPMN_MODE=ohs
+    source "$FRM"
+    local tmp log state
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    state="$tmp/state"
+    FRM_INSTANCES_DIR="$tmp"
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+case "\$1" in
+    status)
+        if [[ ! -f "$state" ]]; then
+            echo 'opmnctl status: opmn is not running.'
+            exit 1
+        fi
+        echo 'Processes in Instance: ohs_a'
+        echo 'ohs1 | OHS | N/A | Down'
+        ;;
+    start)
+        : > "$state"
+        ;;
+    startproc)
+        ;;
+esac
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a start
+    [[ "$(cat "$log")" == $'status\nstatus\nstart\nstartproc process-type=OHS' ]]
+)
+
+
+
+test_opmn_auto_uses_all_for_ohs_only_and_persists_across_restart() (
+    source "$FRM"
+    local tmp log
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    FRM_INSTANCES_DIR="$tmp"
+    FRM_OPMN_MODE=auto
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+case "\${1:-}" in
+    status)
+        echo 'Processes in Instance: ohs_a'
+        echo 'ias-component | process-type | pid | status'
+        echo 'ohs1 | OHS | 1234 | Alive'
+        ;;
+    stopall|startall) ;;
+esac
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a stop
+    [[ "${OPMN_MODE_CACHE[ohs_a]}" == all ]]
+    # Simulate the daemon becoming unavailable after stopall.  The cached mode
+    # must keep the matching start on startall rather than changing strategy.
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+case "\${1:-}" in
+    status) echo 'opmnctl status: opmn is not running.'; exit 1 ;;
+    startall) ;;
+esac
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a start
+    [[ "$(tail -n 2 "$log")" == $'stopall\nstartall' ]]
+)
+
+test_opmn_auto_uses_ohs_scope_for_mixed_instance() (
+    source "$FRM"
+    local tmp log
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    FRM_INSTANCES_DIR="$tmp"
+    FRM_OPMN_MODE=auto
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+case "\${1:-}" in
+    status)
+        echo 'Processes in Instance: ohs_a'
+        echo 'ias-component | process-type | pid | status'
+        echo 'ohs1 | OHS | 1234 | Alive'
+        echo 'other1 | OID | 5678 | Alive'
+        ;;
+    stopproc|startproc) ;;
+esac
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a stop
+    [[ "${OPMN_MODE_CACHE[ohs_a]}" == ohs ]]
+    [[ "$(tail -n 1 "$log")" == 'stopproc process-type=OHS' ]]
+)
+
+test_opmn_auto_start_is_conservative_when_daemon_down() (
+    source "$FRM"
+    local tmp log state
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    state="$tmp/state"
+    FRM_INSTANCES_DIR="$tmp"
+    FRM_OPMN_MODE=auto
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+case "\${1:-}" in
+    status)
+        if [[ ! -f "$state" ]]; then
+            echo 'opmnctl status: opmn is not running.'
+            exit 1
+        fi
+        echo 'Processes in Instance: ohs_a'
+        echo 'ohs1 | OHS | N/A | Down'
+        ;;
+    start) : > "$state" ;;
+    startproc) ;;
+esac
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a start
+    [[ "${OPMN_MODE_CACHE[ohs_a]}" == ohs ]]
+    [[ "$(tail -n 3 "$log")" == $'status\nstart\nstartproc process-type=OHS' ]]
+)
+
+test_opmn_forced_all_mode() (
+    source "$FRM"
+    local tmp log
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    log="$tmp/log"
+    FRM_INSTANCES_DIR="$tmp"
+    FRM_OPMN_MODE=all
+    mkdir -p "$tmp/ohs_a/bin"
+
+    cat > "$tmp/ohs_a/bin/opmnctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$log"
+exit 0
+EOF
+    chmod +x "$tmp/ohs_a/bin/opmnctl"
+
+    execute_action ohs_a stop
+    execute_action ohs_a start
+    [[ "$(cat "$log")" == $'stopall\nstartall' ]]
 )
 
 run_test 'lifecycle confirmation flags parse' test_lifecycle_confirmation_flags_parse
@@ -207,3 +461,12 @@ run_test 'systemd lifecycle backend resolution' test_systemd_action_backend
 run_test 'OPMN lifecycle backend resolution' test_action_backend_opmn
 run_test 'custom handler precedence' test_action_handler_precedence
 run_test 'restart dry-run shows stop and start' test_restart_dry_run_shows_stop_and_start
+run_test 'auto sudo checks exact command-specific rule' test_auto_sudo_checks_exact_command
+run_test 'auto sudo falls back to direct execution when command is not allowed' test_auto_sudo_falls_back_to_direct_when_not_allowed
+run_test 'systemd lifecycle uses sudoers-compatible bare unit command' test_systemd_execute_uses_sudoers_compatible_command
+run_test 'OPMN stop uses stopproc process-type=OHS' test_opmn_stop_uses_stopproc_ohs
+run_test 'OPMN start starts daemon when needed then startproc OHS' test_opmn_start_starts_daemon_when_needed
+run_test 'OPMN auto uses stopall/startall for OHS-only instances and preserves mode' test_opmn_auto_uses_all_for_ohs_only_and_persists_across_restart
+run_test 'OPMN auto scopes to OHS for mixed-process instances' test_opmn_auto_uses_ohs_scope_for_mixed_instance
+run_test 'OPMN auto standalone start is conservative when daemon is down' test_opmn_auto_start_is_conservative_when_daemon_down
+run_test 'OPMN all mode forces stopall/startall' test_opmn_forced_all_mode

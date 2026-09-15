@@ -290,7 +290,7 @@ collect_status() {
         bool_true "$verbose" && emit_native_status_output "$output"
         derive_service_status "$instance" "$output" "$rc" "systemd"
 
-    elif sysv="$(sysv_script_path "$instance")"; then
+    elif sysv="$(sysv_script_path "$instance")" && [[ -x "$sysv" ]]; then
         STATUS_BACKEND="sysv"
         log debug "Using SysV status for $instance: $sysv"
         output="$("$sysv" status 2>&1)"

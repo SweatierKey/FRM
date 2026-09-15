@@ -4,9 +4,23 @@ LIFECYCLE
 
 Backend order for start/stop:
   1. <instance>_start / <instance>_stop custom handler
-  2. OPMN (`opmnctl start|stop`)
-  3. systemd (`systemctl start|stop <instance>.service`)
+  2. OPMN (`opmnctl`)
+  3. systemd (`systemctl start|stop <instance>`)
   4. SysV init script
+
+OPMN policy (`FRM_OPMN_MODE`, default `auto`):
+  auto  if live `opmnctl status` shows only OHS process types, use
+        `stopall`/`startall`; otherwise use OHS-only `stopproc`/`startproc`.
+        A standalone start with OPMN down is conservative: FRM starts OPMN and
+        then starts only process-type=OHS because no live inventory is available.
+  all   always use `stopall`/`startall` for the Oracle Instance.
+  ohs   always manage only `process-type=OHS` (starting OPMN first if needed).
+
+The auto decision is cached per instance for the lifecycle operation. This is
+important for a rolling restart: after `stopall` makes OPMN unavailable, the
+matching start still uses `startall`. Override when needed with:
+  frm restart --opmn-mode all ohs_legacy_11119
+  frm restart --opmn-mode ohs ohs_legacy_11119
 
 FRM verifies transitions by polling the unified status layer:
   start -> wait for RUNNING
@@ -183,6 +197,7 @@ Environment variables:
   FRM_TIMEOUT           transition timeout in seconds
   FRM_POLL_INTERVAL     polling interval in seconds
   FRM_SUDO              auto|always|never
+  FRM_OPMN_MODE         auto|all|ohs
   FRM_INCLUDE_SKIPPED   true/false
   FRM_SKIP_WORDS        space-delimited replacement for default skip words
   FRM_LOCK_FILE         lifecycle lock path
@@ -193,9 +208,9 @@ Handlers file:
   Default: ~/.config/frm/handlers.sh
 
 Example:
-  ohs_jrv_start()  { sudo systemctl start ohs_jrv.service; }
-  ohs_jrv_stop()   { sudo systemctl stop ohs_jrv.service; }
-  ohs_jrv_status() { systemctl status ohs_jrv.service --no-pager; }
+  ohs_jrv_start()  { sudo systemctl start ohs_jrv; }
+  ohs_jrv_stop()   { sudo systemctl stop ohs_jrv; }
+  ohs_jrv_status() { systemctl status ohs_jrv --no-pager; }
 
 Functions exported by the invoking shell are also detected.
 EOF_HELP
@@ -235,11 +250,28 @@ If confirmation is requested without an interactive /dev/tty, FRM exits instead
 of reading from a pipe. Use --yes only when non-interactive execution is intended.
 
 Sudo modes:
-  --sudo auto      use non-interactive sudo when available; otherwise direct
+  --sudo auto      use non-interactive sudo when the exact lifecycle command is
+                   NOPASSWD-authorized; otherwise execute directly
   --sudo always    always invoke sudo for systemd/SysV lifecycle commands
   --sudo never     never invoke sudo
 
-FRM never uses sudo for OPMN or custom handlers unless the handler itself does.
+In auto mode FRM checks the exact command with `sudo -n -l`, which supports
+restricted sudoers entries such as:
+  /usr/bin/systemctl stop ohs_cpf_12
+  /etc/init.d/ohs_msi_12 stop
+
+For systemd FRM deliberately uses the bare unit name (`ohs_cpf_12`) so its
+arguments can match command-specific sudoers rules. FRM never uses sudo for OPMN
+or custom handlers unless the handler itself does.
+
+OPMN modes:
+  --opmn-mode auto  use stopall/startall when the live OPMN inventory contains
+                    only OHS process types; otherwise scope to OHS only
+  --opmn-mode all   force stopall/startall
+  --opmn-mode ohs   force stopproc/startproc process-type=OHS
+
+`auto` is the default. The chosen mode is cached per instance for the lifecycle
+operation, so a rolling stopall is always paired with startall.
 
 Restart defaults to rolling mode so one instance is restored before FRM moves
 on to the next selected instance.

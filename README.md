@@ -189,6 +189,29 @@ frm --timeout 120 --poll-interval 1 restart ohs_jrv
 frm --no-wait stop ohs_jrv
 ```
 
+
+### OPMN lifecycle policy
+
+For OHS 11g, `FRM_OPMN_MODE=auto` is the default. FRM first inspects the live
+OPMN inventory:
+
+- if every managed process type is `OHS`, lifecycle uses the site-friendly
+  `opmnctl stopall` / `opmnctl startall` pair;
+- if another process type is present, lifecycle is scoped to OHS with
+  `stopproc/startproc process-type=OHS`;
+- if a standalone `start` finds OPMN completely down, FRM conservatively starts
+  the OPMN daemon and then only `process-type=OHS`, because no live inventory is
+  available to prove the Oracle Instance is OHS-only.
+
+The decision is cached per instance for the lifecycle operation. In particular,
+a rolling restart that selected `stopall` will still use `startall` after OPMN
+has been stopped. Override the policy explicitly when required:
+
+```bash
+frm restart --opmn-mode all ohs_ipf_11119
+frm restart --opmn-mode ohs ohs_ipf_11119
+```
+
 ### State-aware lifecycle
 
 State filters are evaluated once, after name/glob selection and exclusions, before
@@ -357,15 +380,15 @@ Example:
 
 ```bash
 ohs_jrv_start() {
-    sudo systemctl start ohs_jrv.service
+    sudo systemctl start ohs_jrv
 }
 
 ohs_jrv_stop() {
-    sudo systemctl stop ohs_jrv.service
+    sudo systemctl stop ohs_jrv
 }
 
 ohs_jrv_status() {
-    systemctl status ohs_jrv.service --no-pager
+    systemctl status ohs_jrv --no-pager
 }
 ```
 
@@ -391,8 +414,17 @@ frm --sudo restart ohs_jrv       # always sudo systemd/SysV
 frm --no-sudo restart ohs_jrv    # never sudo
 ```
 
-Default `auto` mode uses non-interactive sudo when already available and otherwise tries
-the command directly.
+Default `auto` mode checks whether the exact lifecycle command is authorized via non-interactive sudo (`sudo -n -l`) and uses sudo only when that exact command is allowed; otherwise it executes directly. This supports tightly scoped sudoers rules. For example:
+
+```text
+/usr/bin/systemctl stop ohs_cpf_12
+/usr/bin/systemctl start ohs_cpf_12
+/etc/init.d/ohs_msi_12 stop
+/etc/init.d/ohs_msi_12 start
+```
+
+FRM intentionally invokes systemd lifecycle commands with the bare unit name (`ohs_cpf_12`, not `ohs_cpf_12.service`) so they can match such sudoers entries.
+
 
 ## Operational commands
 
@@ -463,6 +495,7 @@ Global options are placed **before** the command:
 --timeout SEC
 --poll-interval SEC
 --sudo / --no-sudo / --sudo=auto|always|never
+--opmn-mode auto|all|ohs
 --handlers PATH
 ```
 
@@ -481,6 +514,7 @@ FRM_WAIT
 FRM_TIMEOUT
 FRM_POLL_INTERVAL
 FRM_SUDO
+FRM_OPMN_MODE
 FRM_INCLUDE_SKIPPED
 FRM_SKIP_WORDS
 FRM_LOCK_FILE
@@ -519,7 +553,7 @@ make test
 make compat       # rerun the Bash suite with BASH_COMPAT=4.2
 ```
 
-The current suite contains 43 Bash regression tests plus the end-to-end mock demo
+The current suite contains 52 Bash regression tests plus the end-to-end mock demo
 integration. Tests are split by macro area under `tests/` (`core`, `status`,
 `lifecycle`, `state`) and orchestrated by the small `tests/test.sh` runner. Current
 coverage includes:
@@ -539,6 +573,9 @@ coverage includes:
 - Rejection of zero-second polling/watch busy loops.
 - Plain discovery without unnecessary status backend execution.
 - OPMN and 12c listener-port extraction.
+- Adaptive OPMN lifecycle selection (`stopall/startall` for OHS-only instances,
+  OHS-scoped `stopproc/startproc` for mixed instances), including mode persistence
+  across rolling restarts.
 
 ## Demo recording
 

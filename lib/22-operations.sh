@@ -40,6 +40,7 @@ doctor() {
     printf 'handlers file:    %s%s\n' "$FRM_HANDLERS_FILE" "$([[ -f "$FRM_HANDLERS_FILE" ]] && printf ' (loaded)' || printf ' (not present)')"
     printf 'color:            %s\n' "$FRM_COLOR"
     printf 'sudo mode:        %s\n' "$FRM_SUDO"
+    printf 'OPMN mode:        %s\n' "$FRM_OPMN_MODE"
     printf 'wait:             %s\n' "$FRM_WAIT"
     printf 'timeout:          %ss\n' "$FRM_TIMEOUT"
     printf 'poll interval:    %ss\n' "$FRM_POLL_INTERVAL"
