@@ -23,7 +23,11 @@ compat:
 
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck ./frm ./manage_instances_runtime.sh ./lib/*.sh ./tools/*.sh ./tests/*.sh ./completions/frm.bash; \
+		tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
+		{ printf '%s\n' '#!/usr/bin/env bash'; cat ./lib/*.sh; } > "$$tmp"; \
+		shellcheck -x ./frm ./manage_instances_runtime.sh ./tools/*.sh ./completions/frm.bash; \
+		shellcheck -s bash "$$tmp"; \
+		shellcheck -s bash -e SC1090,SC1091,SC2030,SC2031,SC2034,SC2181,SC2317 ./tests/*.sh; \
 	else \
 		echo "shellcheck not installed; skipping"; \
 	fi

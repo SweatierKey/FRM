@@ -5,6 +5,12 @@ _frm_complete_instances() {
     "$frm_cmd" list 2>/dev/null
 }
 
+_frm_set_compreply() {
+    local words="$1"
+    local current="$2"
+    mapfile -t COMPREPLY < <(compgen -W "$words" -- "$current")
+}
+
 _frm() {
     local cur prev command
     local frm_cmd="${COMP_WORDS[0]}"
@@ -27,57 +33,57 @@ _frm() {
     done
 
     if (( COMP_CWORD == 1 )); then
-        COMPREPLY=( $(compgen -W "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --handlers --help --version" -- "$cur") )
+        _frm_set_compreply "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --handlers --help --version" "$cur"
         return 0
     fi
 
     if [[ "$prev" == "--color" ]]; then
-        COMPREPLY=( $(compgen -W "auto always never" -- "$cur") )
+        _frm_set_compreply "auto always never" "$cur"
         return 0
     fi
 
     if [[ "$prev" == "--sudo" ]]; then
-        COMPREPLY=( $(compgen -W "auto always never" -- "$cur") )
+        _frm_set_compreply "auto always never" "$cur"
         return 0
     fi
 
     if [[ "$prev" == "--state" ]]; then
-        COMPREPLY=( $(compgen -W "RUNNING ACTIVE DOWN STOPPED WARNING UNKNOWN HEALTHY UNHEALTHY" -- "$cur") )
+        _frm_set_compreply "RUNNING ACTIVE DOWN STOPPED WARNING UNKNOWN HEALTHY UNHEALTHY" "$cur"
         return 0
     fi
 
     case "$command" in
         help)
-            COMPREPLY=( $(compgen -W "$help_sections --list" -- "$cur") )
+            _frm_set_compreply "$help_sections --list" "$cur"
             ;;
         plan)
             if [[ "$prev" == "plan" ]]; then
-                COMPREPLY=( $(compgen -W "start stop restart" -- "$cur") )
+                _frm_set_compreply "start stop restart" "$cur"
             else
-                COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd")" -- "$cur") )
+                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd")" "$cur"
             fi
             ;;
         restart)
             if [[ "$prev" == "--strategy" ]]; then
-                COMPREPLY=( $(compgen -W "rolling all-at-once" -- "$cur") )
+                _frm_set_compreply "rolling all-at-once" "$cur"
             else
-                COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd") --strategy --state --preserve-state --confirm --confirm-each --step --yes --all --help" -- "$cur") )
+                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --strategy --state --preserve-state --confirm --confirm-each --step --yes --all --help" "$cur"
             fi
             ;;
         status)
-            COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd") --state --json --tsv --summary --verbose --all --help" -- "$cur") )
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --json --tsv --summary --verbose --all --help" "$cur"
             ;;
         list)
-            COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd") --state --long --json --all --help" -- "$cur") )
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --long --json --all --help" "$cur"
             ;;
         watch)
-            COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd") --state --interval --no-clear --all --help" -- "$cur") )
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --interval --no-clear --all --help" "$cur"
             ;;
         start|stop|shutdown|inspect|processes|ps|ports)
-            COMPREPLY=( $(compgen -W "$(_frm_complete_instances "$frm_cmd") --state --confirm --confirm-each --step --yes --all --help" -- "$cur") )
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --confirm --confirm-each --step --yes --all --help" "$cur"
             ;;
         *)
-            COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+            _frm_set_compreply "$commands" "$cur"
             ;;
     esac
 }

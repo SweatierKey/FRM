@@ -1,0 +1,49 @@
+diff --git a/lib/00-core.sh b/lib/00-core.sh
+index e2c9aba..b129c47 100644
+--- a/lib/00-core.sh
++++ b/lib/00-core.sh
+@@ -138,6 +138,9 @@ json_escape() {
+     # backslashes differently from newer Bash releases.
+     for (( i=0; i<${#s}; i++ )); do
+         ch="${s:i:1}"
++        # SC1003 is a false positive here: the single-quoted Bash literal
++        # intentionally appends two backslashes for JSON escaping.
++        # shellcheck disable=SC1003
+         case "$ch" in
+             '"') out+='\"' ;;
+             \\) out+='\\' ;;
+@@ -342,6 +345,8 @@ matches_exclusion() {
+     local pattern
+ 
+     for pattern in "${EXCLUDE_PATTERNS[@]}"; do
++        # Intentional shell-pattern matching for --exclude.
++        # shellcheck disable=SC2053
+         if [[ "$instance" == $pattern ]]; then
+             return 0
+         fi
+@@ -457,6 +462,8 @@ build_selection() {
+         matched=false
+ 
+         for instance in "${detected_instances[@]}"; do
++            # Intentional shell-pattern matching for instance selectors.
++            # shellcheck disable=SC2053
+             if [[ "$instance" == $selector ]]; then
+                 matched=true
+ 
+diff --git a/lib/50-cli.sh b/lib/50-cli.sh
+index e332616..69ff7bd 100644
+--- a/lib/50-cli.sh
++++ b/lib/50-cli.sh
+@@ -131,7 +131,11 @@ parse_global_options() {
+                 ;;
+             --help)
+                 GLOBAL_REST=(help "${2:-overview}")
+-                [[ $# -ge 2 ]] && shift 2 || shift
++                if (( $# >= 2 )); then
++                    shift 2
++                else
++                    shift
++                fi
+                 GLOBAL_REST+=("$@")
+                 return 0
+                 ;;
