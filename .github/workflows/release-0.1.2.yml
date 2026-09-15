@@ -1,0 +1,73 @@
+name: Apply verified FRM 0.1.2 release
+
+on:
+  push:
+    branches: [release-0.1.2]
+    paths:
+      - '.frm-release/**'
+      - '.github/workflows/release-0.1.2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and apply verified patch
+        shell: bash
+        run: |
+          gzip -dc .frm-release/patch.gz > /tmp/frm-0.1.2.patch
+          echo '3d0fffebd2225a5a981ec064a49af4c4284c9cbafafcabf432898855138a81c6  /tmp/frm-0.1.2.patch' | sha256sum -c -
+          git apply --check /tmp/frm-0.1.2.patch
+          git apply /tmp/frm-0.1.2.patch
+
+      - name: Verify patched source hashes
+        shell: bash
+        run: |
+          check() {
+            local path="$1" expected="$2" actual
+            actual="$(git hash-object "$path")"
+            [[ "$actual" == "$expected" ]] || { echo "SHA mismatch: $path $actual != $expected" >&2; exit 1; }
+          }
+          check CHANGELOG.md 234f9e27413d6f14f4400f105285a5fa70e7ac45
+          check README.md 87d875337137bf435b71d0ba5962e4b98b8ceb51
+          check VERSION d917d3e26adc9854b4569871e20111c38de2606f
+          check completions/frm.bash 4483b4f9b49ed9a85d61c68d6a93f7400d30a0ad
+          check demo/frm-demo.cast e4636449d2521348bf8c0bf59263ac0c9a8f3e33
+          check demo/make-demo-cast.py 315a1127b3c1473a3134085818a3249a88b6665f
+          check lib/00-core.sh 8f1a91a8c0a1fdf8107b09a746a4760eba869fc8
+          check lib/10-status.sh 38753da2f7485cc9c176dba26d4143955f127b5e
+          check lib/20-actions.sh 8f8c74312ed66cdb36017b2b8ba436b774e12fec
+          check lib/22-operations.sh dcb72617d07c77a2fdcbc2276231334232cdb0cf
+          check lib/41-help-extra.sh b7f432502fe3908eccb3971f0755f5b11e1affa6
+          check lib/50-cli.sh bc3e76900e1bfc92945860eab50ed8b9f4fca4fb
+          check tests/lifecycle.sh 8510faf3dbf08d850d3f57602e9880f52ac0a3b9
+
+      - name: Render deterministic README demo
+        run: python3 demo/render_cast.py demo/frm-demo.cast assets/demo.gif
+
+      - name: Functional regression suite
+        run: |
+          make test
+          make compat
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          make lint
+
+      - name: Commit verified 0.1.2 release
+        shell: bash
+        run: |
+          rm -rf .frm-release .github/workflows/release-0.1.2.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Release FRM 0.1.2'
+          git push origin HEAD:release-0.1.2 HEAD:main
