@@ -3,3 +3,8 @@
 *~
 .DS_Store
 /demo/.work/
+/.frm-fixture/
+/dist/
+
+__pycache__/
+*.pyc
