@@ -2,6 +2,9 @@ inspect_instances() {
     local instance
     local family
     local sysv
+    local nm_info=""
+    local nm_pid=""
+    local nm_uptime=""
 
     build_selection "$@" || return $?
 
@@ -15,13 +18,22 @@ inspect_instances() {
         printf '  family:          %s\n' "$family"
         printf '  state:           %s\n' "$STATUS_STATE"
         printf '  detail:          %s\n' "$STATUS_DETAIL"
+        printf '  uptime:          %s\n' "${STATUS_UPTIME:-n/a}"
+        printf '  started at:      %s\n' "${STATUS_STARTED_AT:-n/a}"
         printf '  status backend:  %s\n' "$STATUS_BACKEND"
         printf '  opmnctl:         %s\n' "$([[ -x "$FRM_INSTANCES_DIR/$instance/bin/opmnctl" ]] && printf yes || printf no)"
         printf '  systemd unit:    %s\n' "$(systemd_unit_exists "${instance}.service" && printf '%s' "${instance}.service" || printf none)"
         printf '  sysv script:     %s\n' "${sysv:-none}"
+        if nm_info="$(instance_nodemanager_info "$instance" 2>/dev/null)"; then
+            read -r nm_pid nm_uptime <<< "$nm_info"
+            printf '  nodemanager:     pid=%s%s\n' "$nm_pid" "${nm_uptime:+ uptime=$nm_uptime}"
+        else
+            printf '  nodemanager:     not detected\n'
+        fi
         printf '  start handler:   %s\n' "$(custom_handler_exists "${instance}_start" && printf yes || printf no)"
         printf '  stop handler:    %s\n' "$(custom_handler_exists "${instance}_stop" && printf yes || printf no)"
         printf '  status handler:  %s\n' "$(custom_handler_exists "${instance}_status" && printf yes || printf no)"
+        printf '  configtest handler: %s\n' "$(custom_handler_exists "${instance}_configtest" && printf yes || printf no)"
         printf '\n'
     done
 }
@@ -41,6 +53,9 @@ doctor() {
     printf 'color:            %s\n' "$FRM_COLOR"
     printf 'sudo mode:        %s\n' "$FRM_SUDO"
     printf 'OPMN mode:        %s\n' "$FRM_OPMN_MODE"
+    printf 'on error:         %s\n' "$FRM_ON_ERROR"
+    printf 'lifecycle summary: %s\n' "$FRM_LIFECYCLE_SUMMARY"
+    printf 'config preflight: %s\n' "$FRM_PREFLIGHT_CONFIGTEST"
     printf 'wait:             %s\n' "$FRM_WAIT"
     printf 'timeout:          %ss\n' "$FRM_TIMEOUT"
     printf 'poll interval:    %ss\n' "$FRM_POLL_INTERVAL"

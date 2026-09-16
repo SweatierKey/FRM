@@ -6,7 +6,7 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=testlib.sh
 source "$TEST_DIR/testlib.sh"
 
-for suite in core status lifecycle state; do
+for suite in core status lifecycle state inspection; do
     # shellcheck disable=SC1090
     source "$TEST_DIR/$suite.sh"
 done

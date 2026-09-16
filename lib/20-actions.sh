@@ -53,15 +53,15 @@ opmn_process_types() {
 opmn_instance_is_ohs_only() {
     local opmnctl="$1"
     local type=""
-    local seen=false
+    local found_type=false
 
     while IFS= read -r type; do
         [[ -n "$type" ]] || continue
-        seen=true
+        found_type=true
         [[ "${type,,}" == "ohs" ]] || return 1
     done < <(opmn_process_types "$opmnctl")
 
-    bool_true "$seen"
+    bool_true "$found_type"
 }
 
 resolve_opmn_mode() {
@@ -403,6 +403,147 @@ acquire_lifecycle_lock() {
         log error "Another FRM lifecycle operation holds lock: $FRM_LOCK_FILE"
         return "$EX_LOCKED"
     fi
+}
+
+###############################################################################
+# Lifecycle reporting / failure policy
+###############################################################################
+
+reset_lifecycle_report() {
+    LIFECYCLE_REPORT_ORDER=()
+    LIFECYCLE_RESULT=()
+    LIFECYCLE_OLD_STATE=()
+    LIFECYCLE_NEW_STATE=()
+    LIFECYCLE_OLD_PID=()
+    LIFECYCLE_NEW_PID=()
+    LIFECYCLE_FINAL_UPTIME=()
+    LIFECYCLE_DURATION=()
+    LIFECYCLE_NOTE=()
+    LIFECYCLE_STARTED_CLOCK=()
+}
+
+lifecycle_report_begin() {
+    local instance="$1"
+
+    bool_true "$FRM_LIFECYCLE_SUMMARY" || return 0
+
+    if [[ -z "${LIFECYCLE_RESULT[$instance]+x}" ]]; then
+        LIFECYCLE_REPORT_ORDER+=("$instance")
+    fi
+
+    collect_status "$instance" false
+    LIFECYCLE_RESULT["$instance"]="PENDING"
+    LIFECYCLE_OLD_STATE["$instance"]="$STATUS_STATE"
+    LIFECYCLE_OLD_PID["$instance"]="$STATUS_PID"
+    LIFECYCLE_STARTED_CLOCK["$instance"]="$SECONDS"
+}
+
+lifecycle_report_finish() {
+    local instance="$1"
+    local result="$2"
+    local note="${3:-}"
+    local started="${LIFECYCLE_STARTED_CLOCK[$instance]:-$SECONDS}"
+    local duration=$((SECONDS - started))
+
+    bool_true "$FRM_LIFECYCLE_SUMMARY" || return 0
+
+    collect_status "$instance" false
+    LIFECYCLE_RESULT["$instance"]="$result"
+    LIFECYCLE_NEW_STATE["$instance"]="$STATUS_STATE"
+    LIFECYCLE_NEW_PID["$instance"]="$STATUS_PID"
+    LIFECYCLE_FINAL_UPTIME["$instance"]="$STATUS_UPTIME"
+    LIFECYCLE_DURATION["$instance"]="$duration"
+    LIFECYCLE_NOTE["$instance"]="$note"
+}
+
+lifecycle_report_skip() {
+    local instance="$1"
+    local note="${2:-not attempted}"
+
+    bool_true "$FRM_LIFECYCLE_SUMMARY" || return 0
+
+    if [[ -z "${LIFECYCLE_RESULT[$instance]+x}" ]]; then
+        LIFECYCLE_REPORT_ORDER+=("$instance")
+    fi
+
+    LIFECYCLE_RESULT["$instance"]="SKIPPED"
+    LIFECYCLE_NEW_STATE["$instance"]="-"
+    LIFECYCLE_OLD_STATE["$instance"]="-"
+    LIFECYCLE_OLD_PID["$instance"]="-"
+    LIFECYCLE_NEW_PID["$instance"]="-"
+    LIFECYCLE_FINAL_UPTIME["$instance"]="-"
+    LIFECYCLE_DURATION["$instance"]="0"
+    LIFECYCLE_NOTE["$instance"]="$note"
+}
+
+lifecycle_should_stop_on_error() {
+    local action="$1"
+
+    case "$FRM_ON_ERROR" in
+        stop) return 0 ;;
+        continue) return 1 ;;
+        auto)
+            [[ "$action" == "restart" && "$FRM_RESTART_STRATEGY" == "rolling" ]]
+            ;;
+        *)
+            log error "Invalid on-error mode: $FRM_ON_ERROR"
+            return 0
+            ;;
+    esac
+}
+
+mark_remaining_lifecycle_skipped() {
+    local failed_instance="$1"
+    shift
+    local past_failed=false
+    local instance
+
+    for instance in "$@"; do
+        if [[ "$past_failed" == true ]]; then
+            lifecycle_report_skip "$instance" "fail-fast after $failed_instance"
+        elif [[ "$instance" == "$failed_instance" ]]; then
+            past_failed=true
+        fi
+    done
+}
+
+print_lifecycle_report() {
+    local action="$1"
+    local instance=""
+    local result=""
+    local ok=0 failed=0 skipped=0 other=0
+
+    bool_true "$FRM_LIFECYCLE_SUMMARY" || return 0
+    bool_true "$FRM_DRY_RUN" && return 0
+    (( ${#LIFECYCLE_REPORT_ORDER[@]} > 0 )) || return 0
+
+    printf '\nLifecycle summary (%s):\n' "$action"
+    printf '%-24s %-8s %-9s %-9s %-9s %-9s %-10s %-8s %s\n' \
+        "INSTANCE" "RESULT" "BEFORE" "AFTER" "OLD_PID" "NEW_PID" "UPTIME" "DURATION" "NOTE"
+
+    for instance in "${LIFECYCLE_REPORT_ORDER[@]}"; do
+        result="${LIFECYCLE_RESULT[$instance]:-UNKNOWN}"
+        case "$result" in
+            OK) ok=$((ok + 1)) ;;
+            FAILED) failed=$((failed + 1)) ;;
+            SKIPPED) skipped=$((skipped + 1)) ;;
+            *) other=$((other + 1)) ;;
+        esac
+
+        printf '%-24s %-8s %-9s %-9s %-9s %-9s %-10s %-8s %s\n' \
+            "$instance" \
+            "$result" \
+            "${LIFECYCLE_OLD_STATE[$instance]:--}" \
+            "${LIFECYCLE_NEW_STATE[$instance]:--}" \
+            "${LIFECYCLE_OLD_PID[$instance]:--}" \
+            "${LIFECYCLE_NEW_PID[$instance]:--}" \
+            "${LIFECYCLE_FINAL_UPTIME[$instance]:--}" \
+            "${LIFECYCLE_DURATION[$instance]:-0}s" \
+            "${LIFECYCLE_NOTE[$instance]:-}"
+    done
+
+    printf 'Summary: total=%d ok=%d failed=%d skipped=%d other=%d\n' \
+        "${#LIFECYCLE_REPORT_ORDER[@]}" "$ok" "$failed" "$skipped" "$other"
 }
 
 start_one() {

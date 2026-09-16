@@ -48,7 +48,9 @@ Core commands:
   watch      Continuously refresh status
   inspect    Show detection/backend details
   processes  Show the attributed OHS process tree (alias: ps)
-  ports      Discover OHS listener ports
+  ports      Discover/verify OHS listener ports
+  configtest Validate OHS configuration syntax (read-only)
+  logs       Discover/list/tail OHS logs (read-only)
   plan       Show lifecycle commands without executing them
   doctor     Diagnose FRM and the host
   help       Detailed help by macro section
@@ -90,9 +92,18 @@ COMMANDS
   processes|ps [selectors...]
       Show the OHS master/workers and instance-attributed helper processes.
 
-  ports [selectors...]
-      For OPMN, parse the ports column from `opmnctl status -l`. For 12c,
-      collect unique Listen directives under the instance OHS configuration.
+  ports [--verify] [selectors...]
+      Discover configured listeners. --verify correlates them with live TCP
+      sockets and OHS PIDs when ss/netstat exposes ownership.
+
+  configtest [selectors...]
+      Resolve the running OHS executable/configuration and run a syntax-only
+      `httpd -t` style check. Returns UNAVAILABLE instead of guessing when a
+      reliable command cannot be derived.
+
+  logs [--type all|error|access|admin|audit] [--tail N] [selectors...]
+      Discover known in-instance log roots. Without --tail, list matching files;
+      with --tail, show the newest matching file per selected instance.
 
   plan start|stop|restart [selectors...]
       Resolve and display the exact lifecycle backend/command without running it.
@@ -186,8 +197,8 @@ not the age of the systemd/SysV wrapper service. This makes a successful
 restart visible immediately even when systemd reports `active (exited)`.
 
 Structured formats:
-  JSON adds `uptime` and numeric `uptime_seconds`.
-  TSV adds `uptime` and `uptime_seconds` columns.
+  JSON adds `uptime`, numeric `uptime_seconds`, and ISO-8601 `started_at`.
+  TSV adds `uptime`, `uptime_seconds`, and `started_at` columns.
 
   frm status --json
   frm status --tsv

@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: test syntax unit integration compat lint demo dev-fixture release-check release install uninstall clean
+.PHONY: test syntax unit integration compat lint demo dev-fixture smoke-fixture release-check release install uninstall clean
 
 test: syntax unit integration
 
@@ -9,13 +9,14 @@ unit:
 
 integration:
 	python3 ./demo/make-demo-cast.py >/dev/null
+	./tools/smoke-fixture.sh
 
 syntax:
 	bash -n ./frm
 	bash -n ./manage_instances_runtime.sh
 	@for f in ./tests/*.sh; do bash -n "$$f"; done
 	bash -n ./completions/frm.bash
-	@for f in ./lib/*.sh; do bash -n "$$f"; done
+	@for f in ./lib/*.sh ./tools/*.sh; do bash -n "$$f"; done
 	python3 -m py_compile ./demo/make-demo-cast.py ./demo/render_cast.py ./tools/fixture-lab.py
 
 compat:
@@ -37,6 +38,9 @@ demo:
 
 dev-fixture:
 	./tools/fixture-lab.py ./.frm-fixture --force
+
+smoke-fixture:
+	./tools/smoke-fixture.sh
 
 release-check:
 	./tools/release-check.sh

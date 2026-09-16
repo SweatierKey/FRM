@@ -29,4 +29,8 @@ for instance in "$@"; do
     "$FRM" processes "$instance" || printf '[rc=%d]\n' "$?"
     printf '\n-- ports --\n'
     "$FRM" ports "$instance" || printf '[rc=%d]\n' "$?"
+    printf '\n-- ports verify --\n'
+    "$FRM" ports --verify "$instance" || printf '[rc=%d]\n' "$?"
+    printf '\n-- configtest --\n'
+    "$FRM" configtest "$instance" || printf '[rc=%d]\n' "$?"
 done

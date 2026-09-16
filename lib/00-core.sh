@@ -1,6 +1,6 @@
 set -o pipefail
 
-FRM_VERSION="0.1.4"
+FRM_VERSION="0.2.0-dev"
 
 ###############################################################################
 # Defaults / environment
@@ -26,7 +26,13 @@ FRM_LIST_LONG="false"
 FRM_LIST_FORMAT="table"
 FRM_WATCH_INTERVAL="${FRM_WATCH_INTERVAL:-5}"
 FRM_WATCH_CLEAR="true"
+FRM_PORTS_VERIFY="false"
+FRM_LOG_TYPE="all"                         # all|error|access|admin|audit
+FRM_LOG_TAIL=""
 FRM_RESTART_STRATEGY="rolling"               # rolling|all-at-once
+FRM_ON_ERROR="${FRM_ON_ERROR:-auto}"            # auto|stop|continue
+FRM_LIFECYCLE_SUMMARY="${FRM_LIFECYCLE_SUMMARY:-true}"
+FRM_PREFLIGHT_CONFIGTEST="${FRM_PREFLIGHT_CONFIGTEST:-false}"
 FRM_CONFIRM="${FRM_CONFIRM:-false}"
 FRM_CONFIRM_EACH="${FRM_CONFIRM_EACH:-false}"
 FRM_ASSUME_YES="${FRM_ASSUME_YES:-false}"
@@ -65,14 +71,25 @@ STATUS_PID=""
 STATUS_PROCESS_COUNT=""
 STATUS_UPTIME_SECONDS=""
 STATUS_UPTIME=""
-STATUS_RAW=""
-STATUS_RC=0
+STATUS_STARTED_AT=""
 
 # Action backend result globals.
 ACTION_BACKEND=""
 ACTION_DESCRIPTION=""
 declare -A OPMN_MODE_CACHE=()
 OPMN_RESOLVED_MODE=""
+
+# Lifecycle report globals.
+LIFECYCLE_REPORT_ORDER=()
+declare -A LIFECYCLE_RESULT=()
+declare -A LIFECYCLE_OLD_STATE=()
+declare -A LIFECYCLE_NEW_STATE=()
+declare -A LIFECYCLE_OLD_PID=()
+declare -A LIFECYCLE_NEW_PID=()
+declare -A LIFECYCLE_FINAL_UPTIME=()
+declare -A LIFECYCLE_DURATION=()
+declare -A LIFECYCLE_NOTE=()
+declare -A LIFECYCLE_STARTED_CLOCK=()
 
 # Exit codes.
 EX_OK=0

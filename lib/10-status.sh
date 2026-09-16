@@ -97,8 +97,8 @@ parse_ps_etime_seconds() {
     local rest=""
     local -a parts=()
 
-    value="${value#${value%%[![:space:]]*}}"
-    value="${value%${value##*[![:space:]]}}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
     [[ -n "$value" ]] || return 1
 
     if [[ "$value" == *-* ]]; then
@@ -192,6 +192,30 @@ process_uptime_seconds() {
     process_uptime_seconds_procfs "$pid"
 }
 
+process_started_at() {
+    local uptime_seconds="${1:-}"
+    local now=""
+    local started_epoch=""
+    local value=""
+
+    [[ "$uptime_seconds" =~ ^[0-9]+$ ]] || return 1
+
+    now="$(date +%s 2>/dev/null)" || return 1
+    [[ "$now" =~ ^[0-9]+$ ]] || return 1
+    started_epoch=$((now - uptime_seconds))
+    (( started_epoch >= 0 )) || return 1
+
+    value="$(date -d "@$started_epoch" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" || return 1
+    [[ -n "$value" ]] || return 1
+
+    # Convert +0200 to +02:00 while keeping Bash 4.x compatibility.
+    if [[ "$value" =~ ^(.+)([+-][0-9][0-9])([0-9][0-9])$ ]]; then
+        value="${BASH_REMATCH[1]}${BASH_REMATCH[2]}:${BASH_REMATCH[3]}"
+    fi
+
+    printf '%s\n' "$value"
+}
+
 format_uptime() {
     local total="${1:-}"
     local days hours minutes seconds
@@ -219,6 +243,7 @@ enrich_status_uptime() {
 
     STATUS_UPTIME_SECONDS=""
     STATUS_UPTIME=""
+    STATUS_STARTED_AT=""
 
     case "$STATUS_STATE" in
         RUNNING|WARNING) ;;
@@ -230,6 +255,7 @@ enrich_status_uptime() {
     if seconds="$(process_uptime_seconds "$STATUS_PID")"; then
         STATUS_UPTIME_SECONDS="$seconds"
         STATUS_UPTIME="$(format_uptime "$seconds")"
+        STATUS_STARTED_AT="$(process_started_at "$seconds" 2>/dev/null || true)"
     fi
 }
 
@@ -245,8 +271,7 @@ reset_status_result() {
     STATUS_PROCESS_COUNT=""
     STATUS_UPTIME_SECONDS=""
     STATUS_UPTIME=""
-    STATUS_RAW=""
-    STATUS_RC=0
+    STATUS_STARTED_AT=""
 }
 
 derive_opmn_status() {
@@ -412,8 +437,6 @@ collect_status() {
         log debug "Using custom status handler for $instance: $handler"
         output="$("$handler" 2>&1)"
         rc=$?
-        STATUS_RAW="$output"
-        STATUS_RC=$rc
         bool_true "$verbose" && emit_native_status_output "$output"
         derive_service_status "$instance" "$output" "$rc" "status-handler"
 
@@ -422,8 +445,6 @@ collect_status() {
         log debug "Using opmnctl to check status of $instance: $opmnctl"
         output="$("$opmnctl" status 2>&1)"
         rc=$?
-        STATUS_RAW="$output"
-        STATUS_RC=$rc
         bool_true "$verbose" && emit_native_status_output "$output"
         derive_opmn_status "$instance" "$output" "$rc"
 
@@ -432,8 +453,6 @@ collect_status() {
         log debug "Using systemd unit to check status of $instance: $systemd_unit"
         output="$(systemctl status "$systemd_unit" --no-pager --full 2>&1)"
         rc=$?
-        STATUS_RAW="$output"
-        STATUS_RC=$rc
         bool_true "$verbose" && emit_native_status_output "$output"
         derive_service_status "$instance" "$output" "$rc" "systemd"
 
@@ -442,8 +461,6 @@ collect_status() {
         log debug "Using SysV status for $instance: $sysv"
         output="$("$sysv" status 2>&1)"
         rc=$?
-        STATUS_RAW="$output"
-        STATUS_RC=$rc
         bool_true "$verbose" && emit_native_status_output "$output"
         derive_service_status "$instance" "$output" "$rc" "sysv"
 
@@ -489,9 +506,10 @@ print_status_table_row() {
 }
 
 print_status_tsv_row() {
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$1" "$STATUS_STATE" "$STATUS_BACKEND" "$STATUS_PID" \
-        "$STATUS_PROCESS_COUNT" "$STATUS_UPTIME" "$STATUS_UPTIME_SECONDS" "$STATUS_DETAIL"
+        "$STATUS_PROCESS_COUNT" "$STATUS_UPTIME" "$STATUS_UPTIME_SECONDS" \
+        "$STATUS_STARTED_AT" "$STATUS_DETAIL"
 }
 
 print_status_json_object() {
@@ -502,7 +520,7 @@ print_status_json_object() {
         uptime_seconds_json="$STATUS_UPTIME_SECONDS"
     fi
 
-    printf '{"instance":"%s","state":"%s","backend":"%s","pid":"%s","httpd_count":"%s","uptime":"%s","uptime_seconds":%s,"detail":"%s"}' \
+    printf '{"instance":"%s","state":"%s","backend":"%s","pid":"%s","httpd_count":"%s","uptime":"%s","uptime_seconds":%s,"started_at":"%s","detail":"%s"}' \
         "$(json_escape "$instance")" \
         "$(json_escape "$STATUS_STATE")" \
         "$(json_escape "$STATUS_BACKEND")" \
@@ -510,6 +528,7 @@ print_status_json_object() {
         "$(json_escape "$STATUS_PROCESS_COUNT")" \
         "$(json_escape "$STATUS_UPTIME")" \
         "$uptime_seconds_json" \
+        "$(json_escape "$STATUS_STARTED_AT")" \
         "$(json_escape "$STATUS_DETAIL")"
 }
 

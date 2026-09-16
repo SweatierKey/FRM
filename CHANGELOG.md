@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.0-dev - unreleased
+
+### Added
+
+- Fail-fast rolling restart by default. `--on-error auto|stop|continue` controls
+  whether later lifecycle work is scheduled after a failure; `auto` is
+  conservative for rolling restart while preserving batch start/stop behavior.
+- Final lifecycle evidence summary with before/after state, old/new PID, final
+  uptime, operation duration and skipped/failed results.
+- ISO-8601 `started_at` in JSON/TSV status and `inspect`, derived from the OHS
+  master-process uptime evidence.
+- Read-only `frm configtest` command plus opt-in `--preflight-configtest` for
+  start/restart. FRM reuses the live OHS executable and syntax-affecting flags
+  and returns UNAVAILABLE when it cannot resolve a trustworthy command.
+- `frm ports --verify` to correlate configured listeners with `ss`/`netstat`
+  LISTEN sockets and OHS PID ownership when process metadata is available.
+- Read-only NodeManager awareness in `frm inspect` (PID + uptime only).
+- Read-only `frm logs` discovery for known 11g/12c instance-local log roots, with
+  type filtering and newest-file `--tail N`.
+
+### Safety
+
+- All-at-once restart always attempts to restore every instance that FRM
+  successfully stopped, even when stop-on-error is requested. Recovery wins
+  over fail-fast semantics once a runtime has already been taken down.
+
+### Tests
+
+- Regression coverage for fail-fast/continue behavior, lifecycle summaries,
+  configtest resolution/execution/preflight, started_at, listener ownership and
+  NodeManager detection.
+- Regression suite: 76 tests, also exercised with `BASH_COMPAT=4.2`.
+
 ## 0.1.4 - 2026-09-16
 
 ### Fixed

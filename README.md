@@ -50,12 +50,16 @@ UNKNOWN   state cannot be established safely
 - Repeated exclusion patterns.
 - Compact human status plus JSON and TSV output.
 - Start, stop and restart with post-action state verification.
+- Rolling restart is fail-fast by default; `--on-error continue` is explicit.
+- Lifecycle summary records before/after state, old/new PID, uptime and duration.
 - Rolling restart by default; all-at-once available explicitly.
 - Optional one-shot or per-instance lifecycle confirmations (`--confirm`, `--confirm-each`).
 - Lifecycle lock to prevent concurrent changes.
 - `plan` and `--dry-run` before touching production.
 - Custom lifecycle handlers without editing FRM.
-- `watch`, `inspect`, `processes`/`ps`, `ports` and `doctor` operational commands.
+- `watch`, `inspect`, `processes`/`ps`, `ports`, `configtest`, `logs` and `doctor` operational commands.
+- `ports --verify` correlates configured listeners with live sockets/PIDs.
+- `inspect` reports detected NodeManager PID/uptime without managing it.
 - Detailed help filterable by macro section.
 - No Python/jq dependency at runtime.
 
@@ -190,6 +194,34 @@ frm --no-wait stop ohs_jrv
 ```
 
 
+### Failure policy and lifecycle summary
+
+Rolling restart is fail-fast by default. If an instance cannot stop or cannot
+return RUNNING, later instances remain untouched:
+
+```bash
+frm restart 'ohs_*'                 # auto => fail-fast for rolling
+frm restart --on-error continue 'ohs_*'
+```
+
+`--on-error stop|continue|auto` is available on lifecycle commands. `auto` keeps
+start/stop batch behavior compatible while making rolling restart conservative.
+All-at-once restart always attempts to restore every instance it successfully
+stopped, even when a stop-phase failure occurs.
+
+Lifecycle operations print a final evidence table by default with before/after
+state, old/new PID, final uptime and duration. Disable it with
+`--no-lifecycle-summary`.
+
+Optional syntax preflight before start/restart:
+
+```bash
+frm restart --preflight-configtest 'ohs_*'
+```
+
+This is deliberately opt-in until `frm configtest` has been qualified on each
+Oracle generation in the estate.
+
 ### OPMN lifecycle policy
 
 For OHS 11g, `FRM_OPMN_MODE=auto` is the default. FRM first inspects the live
@@ -299,7 +331,8 @@ independent from systemd's service age, because SysV-generated units commonly re
 For portability across older RHEL/procps versions, elapsed time is resolved through a
 fallback chain: numeric `ps etimes`, then `ps etime` (`[[dd-]hh:]mm:ss`), then Linux
 `/proc/<pid>/stat` plus `/proc/uptime`. The displayed value and `uptime_seconds` therefore
-remain available even on hosts whose `ps` does not implement `etimes`.
+remain available even on hosts whose `ps` does not implement `etimes`. JSON/TSV and
+`inspect` also expose an ISO-8601 `started_at` derived from the same process evidence.
 
 ## Structured output
 
@@ -319,6 +352,7 @@ frm status --json
     "httpd_count": "6",
     "uptime": "4m37s",
     "uptime_seconds": 277,
+    "started_at": "2026-09-16T01:46:12+02:00",
     "detail": "pid=3217 httpd=6"
   }
 ]
@@ -445,12 +479,26 @@ frm list --long
 frm inspect ohs_jrv
 frm processes ohs_jrv
 frm ports ohs_jrv
+frm ports --verify ohs_jrv
+frm configtest ohs_jrv
+frm logs --type error --tail 100 ohs_jrv
 frm plan restart ohs_jrv
 frm doctor
 frm watch --interval 2
 ```
 
 `doctor` reports dependencies, discovery, selected backends and terminal/color behavior.
+`inspect` also reports a detected NodeManager PID/uptime when the Java process has a
+matching `-Dweblogic.RootDirectory`; FRM does not implicitly start/stop NodeManager.
+
+`configtest` is read-only and derives the live OHS executable plus syntax-affecting
+startup flags. When a reliable command cannot be derived it returns UNAVAILABLE instead
+of guessing. `ports --verify` compares configured ports with `ss`/`netstat` LISTEN
+sockets and checks OHS PID ownership when the OS exposes process metadata.
+
+`logs` is also read-only. It only searches known paths inside the selected Oracle
+Instance (`servers/<instance>/logs`, `diagnostics/logs/OHS`, `auditlogs/OHS`, `logs`).
+Use `--type error|access|admin|audit|all`; `--tail N` prints the newest matching file.
 
 ## Detailed help
 
@@ -508,6 +556,9 @@ Global options are placed **before** the command:
 --poll-interval SEC
 --sudo / --no-sudo / --sudo=auto|always|never
 --opmn-mode auto|all|ohs
+--on-error auto|stop|continue
+--lifecycle-summary / --no-lifecycle-summary
+--preflight-configtest
 --handlers PATH
 ```
 
@@ -527,6 +578,9 @@ FRM_TIMEOUT
 FRM_POLL_INTERVAL
 FRM_SUDO
 FRM_OPMN_MODE
+FRM_ON_ERROR
+FRM_LIFECYCLE_SUMMARY
+FRM_PREFLIGHT_CONFIGTEST
 FRM_INCLUDE_SKIPPED
 FRM_SKIP_WORDS
 FRM_LOCK_FILE
@@ -565,9 +619,9 @@ make test
 make compat       # rerun the Bash suite with BASH_COMPAT=4.2
 ```
 
-The current suite contains 55 Bash regression tests plus the end-to-end mock demo
+The current suite contains 76 Bash regression tests plus the end-to-end mock demo
 integration. Tests are split by macro area under `tests/` (`core`, `status`,
-`lifecycle`, `state`) and orchestrated by the small `tests/test.sh` runner. Current
+`lifecycle`, `state`, `inspection`) and orchestrated by the small `tests/test.sh` runner. Current
 coverage includes:
 
 - Bash syntax.
@@ -588,6 +642,10 @@ coverage includes:
 - Adaptive OPMN lifecycle selection (`stopall/startall` for OHS-only instances,
   OHS-scoped `stopproc/startproc` for mixed instances), including mode persistence
   across rolling restarts.
+- Rolling fail-fast / explicit continue-on-error policy.
+- Lifecycle evidence summary and configtest preflight gating.
+- Portable process `started_at`, NodeManager detection, configtest resolution,
+  live listener ownership verification and conservative in-instance log discovery.
 
 ## Demo recording
 

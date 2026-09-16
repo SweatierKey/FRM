@@ -173,6 +173,20 @@ fi
         True,
     )
 
+    # Freeze wall-clock time so started_at remains reproducible across runs.
+    write(
+        mockbin / "date",
+        r'''#!/usr/bin/env bash
+set -u
+if [[ "$#" -eq 1 && "$1" == "+%s" ]]; then
+  echo "1789516808"
+  exit 0
+fi
+TZ=UTC exec /usr/bin/date "$@"
+''',
+        True,
+    )
+
     # Mock sudo so auto mode stays deterministic if needed.
     write(
         mockbin / "sudo",
@@ -244,7 +258,8 @@ def main():
 
         events = []
         t = 0.2
-        events.append(cast_event(t, "\x1b[1;36mFRM 0.1.3\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
+        version = (ROOT / "VERSION").read_text().strip()
+        events.append(cast_event(t, f"\x1b[1;36mFRM {version}\x1b[0m  Fronten Runtime Manager\r\n\r\n"))
 
         for idx, (display, argv, max_lines, expected) in enumerate(scenes):
             if idx in {2, 5}:

@@ -7,7 +7,9 @@ Oracle estates, demos and releases.
 ## `fixture-lab.py`
 
 Creates an isolated mixed OHS estate containing mock 11g/OPMN and 12c/systemd
-instances. It also creates mock `systemctl` and `ps` commands.
+instances. It also creates mock `systemctl`, `ps`, `ss`, OPMN lifecycle commands and
+syntax-checking OHS binaries so status/lifecycle/configtest/ports verification can be
+exercised without middleware.
 
 ```bash
 make dev-fixture
@@ -18,6 +20,15 @@ PATH="$PWD/.frm-fixture/bin:$PATH" \
 
 This is useful for experimenting with selectors/lifecycle behavior without middleware.
 
+Run the full fixture smoke path with:
+
+```bash
+make smoke-fixture
+```
+
+The smoke test covers mixed status, `configtest`, `ports --verify`, log discovery, rolling restart,
+lifecycle evidence summaries and structured uptime/started-at output.
+
 ## `backend-probe.sh`
 
 Runs several non-destructive FRM views against one or more real instances:
@@ -27,8 +38,8 @@ FRM_INSTANCES_DIR=/u01/app/oracle/admin \
   tools/backend-probe.sh ohs_jrv ohs_lfr7
 ```
 
-It collects `inspect`, compact/verbose `status`, `processes`, and `ports`. It does not
-start or stop anything.
+It collects `inspect`, compact/verbose `status`, `processes`, `ports`, `ports --verify`
+and `configtest`. It does not start or stop anything.
 
 ## `release-check.sh`
 

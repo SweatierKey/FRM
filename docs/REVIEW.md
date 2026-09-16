@@ -70,6 +70,9 @@ into FRM.
 - Lifecycle locking.
 - Optional batch/per-instance confirmations for state-changing operations.
 - Rolling restart can pause between fully restored instances.
+- Rolling restart is fail-fast by default, with explicit continue-on-error override.
+- Lifecycle evidence summary records old/new PID, final uptime and duration.
+- Optional read-only configtest preflight before start/restart.
 
 ### Operations
 
@@ -81,25 +84,30 @@ into FRM.
 - `watch`
 - `inspect`
 - `processes` / `ps`
-- `ports`
+- `ports` / `ports --verify`
+- `configtest`
+- `logs`
 - `plan`
 - `doctor`
 - sectioned `help` (including monitoring, inspection and installation sections)
 - `version`
 
-## Deliberately not implemented in v0.1.0
+## Remaining roadmap after 0.2.0-dev
 
-These are useful future additions, but they require environment-specific decisions rather
-than generic guesses:
+The core runtime/lifecycle path is now covered. Remaining work mostly requires
+environment-specific policy rather than generic guesses:
 
 1. **HTTP/HTTPS application health probes.** FRM currently validates the OHS runtime,
    not whether every front-end URL is functionally healthy.
-2. **Oracle configuration validation.** A future `configtest` command could discover the
-   correct Oracle Apache/OHS configuration checker per product generation.
-3. **Deep port ownership validation.** FRM now inventories OPMN ports and 12c `Listen`
-   directives, but does not yet correlate every listener with `ss`/`netstat` ownership.
-4. **Log navigation.** Log locations differ enough between 11g, 12c and local conventions
-   that this should be added with explicit discovery rules instead of guessing.
+2. **Automatic configtest enforcement.** `frm configtest` and opt-in lifecycle
+   preflight now exist, but automatic preflight remains disabled until both real 11g
+   and 12c estates have been qualified.
+3. **Advanced listener diagnostics.** `ports --verify` correlates configured ports with
+   sockets/PIDs; future work could include protocol/TLS probing and richer bind-address
+   policy checks.
+4. **Advanced log navigation.** Basic read-only discovery and newest-file tailing now
+   cover known instance-local 11g/12c roots. Future work can add pager/follow modes,
+   log-role overrides and environment-specific conventions without guessing globally.
 5. **Remote multi-host orchestration.** FRM is intentionally local to one host. It can be
    wrapped by SSH/psmpx/Ansible/ob-multihost later without coupling credentials into FRM.
 6. **Application-aware draining.** Rolling restart means sequential runtime restart; it

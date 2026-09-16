@@ -449,6 +449,128 @@ EOF
     [[ "$(cat "$log")" == $'stopall\nstartall' ]]
 )
 
+
+
+test_rolling_restart_fail_fast_by_default() (
+    source "$FRM"
+    FRM_RESTART_STRATEGY=rolling
+    FRM_ON_ERROR=auto
+    FRM_DRY_RUN=false
+    FRM_LIFECYCLE_SUMMARY=false
+    local events=""
+    local rc=0
+
+    build_selection() { SELECTED_INSTANCES=(ohs_a ohs_b); return 0; }
+    acquire_lifecycle_lock() { return 0; }
+    preflight_configtest_instances() { return 0; }
+    confirm_lifecycle_batch() { return 0; }
+    confirm_lifecycle_instance() { return 0; }
+    lifecycle_report_begin() { events+="begin:$1;"; }
+    lifecycle_report_finish() { events+="finish:$1:$2;"; }
+    lifecycle_report_skip() { events+="skip:$1;"; }
+    print_lifecycle_report() { :; }
+    stop_one() { events+="stop:$1;"; return 0; }
+    start_one() {
+        events+="start:$1;"
+        [[ "$1" == ohs_a ]] && return "$EX_STATE"
+        return 0
+    }
+
+    restart_instances >/dev/null 2>&1
+    rc=$?
+    [[ "$rc" -eq "$EX_STATE" ]]
+    [[ "$events" == 'begin:ohs_a;stop:ohs_a;start:ohs_a;finish:ohs_a:FAILED;skip:ohs_b;' ]]
+)
+
+
+test_rolling_restart_can_continue_on_error() (
+    source "$FRM"
+    FRM_RESTART_STRATEGY=rolling
+    FRM_ON_ERROR="continue"
+    FRM_DRY_RUN=false
+    FRM_LIFECYCLE_SUMMARY=false
+    local events=""
+    local rc=0
+
+    build_selection() { SELECTED_INSTANCES=(ohs_a ohs_b); return 0; }
+    acquire_lifecycle_lock() { return 0; }
+    preflight_configtest_instances() { return 0; }
+    confirm_lifecycle_batch() { return 0; }
+    confirm_lifecycle_instance() { return 0; }
+    lifecycle_report_begin() { :; }
+    lifecycle_report_finish() { :; }
+    lifecycle_report_skip() { :; }
+    print_lifecycle_report() { :; }
+    stop_one() { events+="stop:$1;"; return 0; }
+    start_one() {
+        events+="start:$1;"
+        [[ "$1" == ohs_a ]] && return "$EX_STATE"
+        return 0
+    }
+
+    restart_instances >/dev/null 2>&1
+    rc=$?
+    [[ "$rc" -eq "$EX_STATE" ]]
+    [[ "$events" == 'stop:ohs_a;start:ohs_a;stop:ohs_b;start:ohs_b;' ]]
+)
+
+
+test_lifecycle_summary_contains_restart_evidence() (
+    source "$FRM"
+    FRM_LIFECYCLE_SUMMARY=true
+    FRM_DRY_RUN=false
+    LIFECYCLE_REPORT_ORDER=(ohs_a)
+    LIFECYCLE_RESULT[ohs_a]=OK
+    LIFECYCLE_OLD_STATE[ohs_a]=RUNNING
+    LIFECYCLE_NEW_STATE[ohs_a]=RUNNING
+    LIFECYCLE_OLD_PID[ohs_a]=111
+    LIFECYCLE_NEW_PID[ohs_a]=222
+    LIFECYCLE_FINAL_UPTIME[ohs_a]=8s
+    LIFECYCLE_DURATION[ohs_a]=19
+    LIFECYCLE_NOTE[ohs_a]=''
+    local out
+
+    out="$(print_lifecycle_report restart)"
+    [[ "$out" == *'Lifecycle summary (restart):'* ]]
+    [[ "$out" == *'ohs_a'* ]]
+    [[ "$out" == *'111'* ]]
+    [[ "$out" == *'222'* ]]
+    [[ "$out" == *'8s'* ]]
+    [[ "$out" == *'total=1 ok=1 failed=0 skipped=0'* ]]
+)
+
+
+test_lifecycle_new_flags_parse() (
+    source "$FRM"
+    parse_lifecycle_args --on-error continue --no-lifecycle-summary --preflight-configtest ohs_a
+    [[ "$FRM_ON_ERROR" == continue ]]
+    [[ "$FRM_LIFECYCLE_SUMMARY" == false ]]
+    [[ "$FRM_PREFLIGHT_CONFIGTEST" == true ]]
+    [[ "${LIFECYCLE_SELECTORS[*]}" == ohs_a ]]
+)
+
+
+test_preflight_configtest_aborts_before_start() (
+    source "$FRM"
+    FRM_PREFLIGHT_CONFIGTEST=true
+    local started=false
+
+    build_selection() { SELECTED_INSTANCES=(ohs_a); return 0; }
+    acquire_lifecycle_lock() { return 0; }
+    preflight_configtest_instances() { return "$EX_STATE"; }
+    confirm_lifecycle_batch() { return 0; }
+    start_one() { started=true; return 0; }
+
+    start_instances >/dev/null 2>&1
+    [[ $? -eq "$EX_STATE" ]]
+    [[ "$started" == false ]]
+)
+
+run_test 'rolling restart fail-fast is default' test_rolling_restart_fail_fast_by_default
+run_test 'rolling restart can continue on error' test_rolling_restart_can_continue_on_error
+run_test 'lifecycle summary includes restart evidence' test_lifecycle_summary_contains_restart_evidence
+run_test 'new lifecycle safety flags parse' test_lifecycle_new_flags_parse
+run_test 'configtest preflight aborts before lifecycle' test_preflight_configtest_aborts_before_start
 run_test 'lifecycle confirmation flags parse' test_lifecycle_confirmation_flags_parse
 run_test 'rolling confirm-each preserves instance atomicity' test_rolling_confirm_each_order
 run_test 'rolling cancellation occurs between instances' test_rolling_cancel_before_next_instance

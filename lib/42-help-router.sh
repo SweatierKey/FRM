@@ -9,7 +9,7 @@ show_help() {
         status) help_status ;;
         lifecycle|start|stop|restart) help_lifecycle ;;
         monitoring|watch) help_monitoring ;;
-        inspection|inspect|processes|ps|ports|doctor) help_inspection ;;
+        inspection|inspect|processes|ps|ports|configtest|logs|doctor) help_inspection ;;
         output|color|json|tsv) help_output ;;
         configuration|config|env) help_configuration ;;
         installation|install|completion) help_installation ;;

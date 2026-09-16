@@ -296,7 +296,23 @@ test_status_json() (
     }
     FRM_STATUS_FORMAT=json
     out="$(status_instances ohs_a)"
-    [[ "$out" == '[{"instance":"ohs_a","state":"RUNNING","backend":"opmn","pid":"42","httpd_count":"","uptime":"4m37s","uptime_seconds":277,"detail":"pid=42 opmn=Alive"}]' ]]
+    [[ "$out" == '[{"instance":"ohs_a","state":"RUNNING","backend":"opmn","pid":"42","httpd_count":"","uptime":"4m37s","uptime_seconds":277,"started_at":"","detail":"pid=42 opmn=Alive"}]' ]]
+)
+
+
+
+test_process_started_at_iso8601() (
+    source "$FRM"
+    date() {
+        if [[ "$*" == '+%s' ]]; then
+            printf '1000\n'
+        elif [[ "$1" == -d && "$2" == '@723' ]]; then
+            printf '2026-09-16T01:46:12+0200\n'
+        else
+            return 1
+        fi
+    }
+    [[ "$(process_started_at 277)" == '2026-09-16T01:46:12+02:00' ]]
 )
 
 run_test 'plain list avoids status backends' test_plain_list_does_not_collect_status
@@ -319,4 +335,5 @@ run_test 'process uptime falls back to etime' test_process_uptime_falls_back_to_
 run_test 'ps etime parser supports days' test_ps_etime_parser_supports_days
 run_test 'process uptime falls back to procfs' test_process_uptime_falls_back_to_procfs
 run_test 'status table includes uptime' test_status_table_includes_uptime
+run_test 'process started_at is ISO-8601' test_process_started_at_iso8601
 run_test 'JSON status output' test_status_json

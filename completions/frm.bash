@@ -14,7 +14,7 @@ _frm_set_compreply() {
 _frm() {
     local cur prev command
     local frm_cmd="${COMP_WORDS[0]}"
-    local commands="list status start stop shutdown restart watch inspect processes ps ports plan doctor help version"
+    local commands="list status start stop shutdown restart watch inspect processes ps ports configtest logs plan doctor help version"
     local help_sections="overview commands selection status lifecycle monitoring inspection output configuration installation safety exit-codes examples all"
 
     COMPREPLY=()
@@ -25,7 +25,7 @@ _frm() {
     local word
     for word in "${COMP_WORDS[@]:1}"; do
         case "$word" in
-            list|status|start|stop|shutdown|restart|watch|inspect|processes|ps|ports|plan|doctor|help|version)
+            list|status|start|stop|shutdown|restart|watch|inspect|processes|ps|ports|configtest|logs|plan|doctor|help|version)
                 command="$word"
                 break
                 ;;
@@ -33,7 +33,7 @@ _frm() {
     done
 
     if (( COMP_CWORD == 1 )); then
-        _frm_set_compreply "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --opmn-mode --handlers --help --version" "$cur"
+        _frm_set_compreply "$commands --debug --quiet --color --instances-dir --exclude --state --include-skipped --dry-run --confirm --confirm-each --step --yes --wait --no-wait --timeout --poll-interval --sudo --no-sudo --opmn-mode --on-error --lifecycle-summary --no-lifecycle-summary --preflight-configtest --handlers --help --version" "$cur"
         return 0
     fi
 
@@ -49,6 +49,11 @@ _frm() {
 
     if [[ "$prev" == "--opmn-mode" ]]; then
         _frm_set_compreply "auto all ohs" "$cur"
+        return 0
+    fi
+
+    if [[ "$prev" == "--on-error" ]]; then
+        _frm_set_compreply "auto stop continue" "$cur"
         return 0
     fi
 
@@ -72,7 +77,7 @@ _frm() {
             if [[ "$prev" == "--strategy" ]]; then
                 _frm_set_compreply "rolling all-at-once" "$cur"
             else
-                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --strategy --opmn-mode --state --preserve-state --confirm --confirm-each --step --yes --all --help" "$cur"
+                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --strategy --opmn-mode --state --preserve-state --on-error --lifecycle-summary --no-lifecycle-summary --preflight-configtest --confirm --confirm-each --step --yes --all --help" "$cur"
             fi
             ;;
         status)
@@ -84,8 +89,21 @@ _frm() {
         watch)
             _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --interval --no-clear --all --help" "$cur"
             ;;
-        start|stop|shutdown|inspect|processes|ps|ports)
-            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --opmn-mode --state --confirm --confirm-each --step --yes --all --help" "$cur"
+        start|stop|shutdown)
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --opmn-mode --state --on-error --lifecycle-summary --no-lifecycle-summary --preflight-configtest --confirm --confirm-each --step --yes --all --help" "$cur"
+            ;;
+        ports)
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --verify --state --all --help" "$cur"
+            ;;
+        logs)
+            if [[ "$prev" == "--type" ]]; then
+                _frm_set_compreply "all error access admin audit" "$cur"
+            else
+                _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --type --tail --state --all --help" "$cur"
+            fi
+            ;;
+        inspect|processes|ps|configtest)
+            _frm_set_compreply "$(_frm_complete_instances "$frm_cmd") --state --all --help" "$cur"
             ;;
         *)
             _frm_set_compreply "$commands" "$cur"

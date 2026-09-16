@@ -30,7 +30,7 @@ BASH_COMPAT=4.2 ./tests/test.sh >/dev/null
 ok 'Bash 4.2 compatibility'
 
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck frm manage_instances_runtime.sh lib/*.sh tools/*.sh tests/*.sh completions/frm.bash
+    make lint >/dev/null
     ok 'shellcheck'
 else
     printf 'skip shellcheck (not installed)\n'

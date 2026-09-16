@@ -61,7 +61,7 @@ status_instances() {
     log debug "Checking status of ${#SELECTED_INSTANCES[@]} selected instance(s)"
 
     [[ "$FRM_STATUS_FORMAT" == "json" ]] && printf '['
-    [[ "$FRM_STATUS_FORMAT" == "tsv" ]] && printf 'instance\tstate\tbackend\tpid\thttpd_count\tuptime\tuptime_seconds\tdetail\n'
+    [[ "$FRM_STATUS_FORMAT" == "tsv" ]] && printf 'instance\tstate\tbackend\tpid\thttpd_count\tuptime\tuptime_seconds\tstarted_at\tdetail\n'
 
     for instance in "${SELECTED_INSTANCES[@]}"; do
         collect_status "$instance" "$FRM_VERBOSE_STATUS"
@@ -115,23 +115,36 @@ start_instances() {
         return 0
     fi
     acquire_lifecycle_lock || return $?
+    preflight_configtest_instances || return $?
     confirm_lifecycle_batch start "${SELECTED_INSTANCES[@]}" || return $?
+    reset_lifecycle_report
 
     total=${#SELECTED_INSTANCES[@]}
     for instance in "${SELECTED_INSTANCES[@]}"; do
         index=$((index + 1))
         if ! confirm_lifecycle_instance start "$instance" "$index" "$total"; then
-            log warning "Start cancelled before instance: $instance"
+            lifecycle_report_skip "$instance" "cancelled"
+            mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+            print_lifecycle_report start
             return "$EX_CANCELLED"
         fi
 
+        lifecycle_report_begin "$instance"
         start_one "$instance"
         action_rc=$?
-        if (( action_rc > rc )); then
-            rc="$action_rc"
+        if (( action_rc == 0 )); then
+            lifecycle_report_finish "$instance" OK
+        else
+            lifecycle_report_finish "$instance" FAILED "start rc=$action_rc"
+            (( action_rc > rc )) && rc="$action_rc"
+            if lifecycle_should_stop_on_error start; then
+                mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+                break
+            fi
         fi
     done
 
+    print_lifecycle_report start
     return "$rc"
 }
 
@@ -149,31 +162,45 @@ stop_instances() {
     fi
     acquire_lifecycle_lock || return $?
     confirm_lifecycle_batch stop "${SELECTED_INSTANCES[@]}" || return $?
+    reset_lifecycle_report
 
     total=${#SELECTED_INSTANCES[@]}
     for instance in "${SELECTED_INSTANCES[@]}"; do
         index=$((index + 1))
         if ! confirm_lifecycle_instance stop "$instance" "$index" "$total"; then
-            log warning "Stop cancelled before instance: $instance"
+            lifecycle_report_skip "$instance" "cancelled"
+            mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+            print_lifecycle_report stop
             return "$EX_CANCELLED"
         fi
 
+        lifecycle_report_begin "$instance"
         stop_one "$instance"
         action_rc=$?
-        if (( action_rc > rc )); then
-            rc="$action_rc"
+        if (( action_rc == 0 )); then
+            lifecycle_report_finish "$instance" OK
+        else
+            lifecycle_report_finish "$instance" FAILED "stop rc=$action_rc"
+            (( action_rc > rc )) && rc="$action_rc"
+            if lifecycle_should_stop_on_error stop; then
+                mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+                break
+            fi
         fi
     done
 
+    print_lifecycle_report stop
     return "$rc"
 }
 
 restart_instances() {
     local instance
+    local candidate
     local rc=0
     local action_rc=0
     local index=0
     local total=0
+    local failed_instance=""
     local -a stopped=()
 
     build_selection "$@" || return $?
@@ -191,7 +218,9 @@ restart_instances() {
     esac
 
     acquire_lifecycle_lock || return $?
+    preflight_configtest_instances || return $?
     confirm_lifecycle_batch "restart ($FRM_RESTART_STRATEGY)" "${SELECTED_INSTANCES[@]}" || return $?
+    reset_lifecycle_report
     total=${#SELECTED_INSTANCES[@]}
 
     if bool_true "$FRM_DRY_RUN"; then
@@ -203,18 +232,13 @@ restart_instances() {
             fi
 
             log info "DRY-RUN restart instance: $instance"
-
             execute_action "$instance" stop
             action_rc=$?
-            if (( action_rc > rc )); then
-                rc="$action_rc"
-            fi
+            (( action_rc > rc )) && rc="$action_rc"
 
             execute_action "$instance" start
             action_rc=$?
-            if (( action_rc > rc )); then
-                rc="$action_rc"
-            fi
+            (( action_rc > rc )) && rc="$action_rc"
         done
         return "$rc"
     fi
@@ -224,10 +248,13 @@ restart_instances() {
             for instance in "${SELECTED_INSTANCES[@]}"; do
                 index=$((index + 1))
                 if ! confirm_lifecycle_instance restart "$instance" "$index" "$total"; then
-                    log warning "Rolling restart cancelled before instance: $instance"
+                    lifecycle_report_skip "$instance" "cancelled"
+                    mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+                    print_lifecycle_report restart
                     return "$EX_CANCELLED"
                 fi
 
+                lifecycle_report_begin "$instance"
                 log info "Rolling restart [$index/$total]: $instance"
                 stop_one "$instance"
                 action_rc=$?
@@ -235,13 +262,22 @@ restart_instances() {
                 if (( action_rc == 0 )); then
                     start_one "$instance"
                     action_rc=$?
-                    if (( action_rc > rc )); then
-                        rc="$action_rc"
+                    if (( action_rc == 0 )); then
+                        lifecycle_report_finish "$instance" OK
+                    else
+                        lifecycle_report_finish "$instance" FAILED "start rc=$action_rc"
                     fi
                 else
                     log error "Not starting $instance because stop failed"
-                    if (( action_rc > rc )); then
-                        rc="$action_rc"
+                    lifecycle_report_finish "$instance" FAILED "stop rc=$action_rc"
+                fi
+
+                if (( action_rc != 0 )); then
+                    (( action_rc > rc )) && rc="$action_rc"
+                    if lifecycle_should_stop_on_error restart; then
+                        log error "Fail-fast: stopping rolling restart after failure on $instance"
+                        mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+                        break
                     fi
                 fi
             done
@@ -256,6 +292,10 @@ restart_instances() {
                 for instance in "${SELECTED_INSTANCES[@]}"; do
                     index=$((index + 1))
                     if ! confirm_lifecycle_instance "all-at-once restart" "$instance" "$index" "$total"; then
+                        for candidate in "${SELECTED_INSTANCES[@]}"; do
+                            lifecycle_report_skip "$candidate" "cancelled in preflight"
+                        done
+                        print_lifecycle_report restart
                         log warning "All-at-once restart cancelled during preflight before any state change"
                         return "$EX_CANCELLED"
                     fi
@@ -263,26 +303,42 @@ restart_instances() {
             fi
 
             for instance in "${SELECTED_INSTANCES[@]}"; do
+                lifecycle_report_begin "$instance"
                 stop_one "$instance"
                 action_rc=$?
 
                 if (( action_rc == 0 )); then
                     stopped+=("$instance")
-                elif (( action_rc > rc )); then
-                    rc="$action_rc"
+                else
+                    lifecycle_report_finish "$instance" FAILED "stop rc=$action_rc"
+                    (( action_rc > rc )) && rc="$action_rc"
+                    failed_instance="$instance"
+                    if lifecycle_should_stop_on_error restart; then
+                        mark_remaining_lifecycle_skipped "$instance" "${SELECTED_INSTANCES[@]}"
+                        break
+                    fi
                 fi
             done
 
+            # Always attempt to restore every instance that FRM successfully
+            # stopped, even when --on-error=stop is used. Recovery takes
+            # precedence over fail-fast semantics in all-at-once mode.
             for instance in "${stopped[@]}"; do
                 start_one "$instance"
                 action_rc=$?
-                if (( action_rc > rc )); then
-                    rc="$action_rc"
+                if (( action_rc == 0 )); then
+                    lifecycle_report_finish "$instance" OK
+                else
+                    lifecycle_report_finish "$instance" FAILED "start rc=$action_rc"
+                    (( action_rc > rc )) && rc="$action_rc"
                 fi
             done
+
+            [[ -z "$failed_instance" ]] || log error "All-at-once stop phase encountered failure on $failed_instance"
             ;;
     esac
 
+    print_lifecycle_report restart
     return "$rc"
 }
 

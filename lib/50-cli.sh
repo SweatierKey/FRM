@@ -129,6 +129,27 @@ parse_global_options() {
                 FRM_OPMN_MODE="${1#*=}"
                 shift
                 ;;
+            --on-error)
+                [[ $# -ge 2 ]] || { log error "--on-error requires auto|stop|continue"; return "$EX_GENERAL"; }
+                FRM_ON_ERROR="$2"
+                shift 2
+                ;;
+            --on-error=*)
+                FRM_ON_ERROR="${1#*=}"
+                shift
+                ;;
+            --lifecycle-summary)
+                FRM_LIFECYCLE_SUMMARY=true
+                shift
+                ;;
+            --no-lifecycle-summary)
+                FRM_LIFECYCLE_SUMMARY=false
+                shift
+                ;;
+            --preflight-configtest)
+                FRM_PREFLIGHT_CONFIGTEST=true
+                shift
+                ;;
             --handlers)
                 [[ $# -ge 2 ]] || { log error "--handlers requires a path"; return "$EX_GENERAL"; }
                 FRM_HANDLERS_FILE="$2"
@@ -257,6 +278,23 @@ parse_lifecycle_args() {
             --yes|-y)
                 FRM_ASSUME_YES=true
                 ;;
+            --on-error)
+                [[ $# -ge 2 ]] || { log error "--on-error requires auto|stop|continue"; return "$EX_GENERAL"; }
+                FRM_ON_ERROR="$2"
+                shift
+                ;;
+            --on-error=*)
+                FRM_ON_ERROR="${1#*=}"
+                ;;
+            --lifecycle-summary)
+                FRM_LIFECYCLE_SUMMARY=true
+                ;;
+            --no-lifecycle-summary)
+                FRM_LIFECYCLE_SUMMARY=false
+                ;;
+            --preflight-configtest)
+                FRM_PREFLIGHT_CONFIGTEST=true
+                ;;
             --state)
                 [[ $# -ge 2 ]] || { log error "--state requires a state"; return "$EX_GENERAL"; }
                 add_state_filter "$2" || return $?
@@ -334,6 +372,82 @@ parse_selector_args() {
     done
 }
 
+parse_logs_args() {
+    LOG_SELECTORS=()
+
+    while (( $# )); do
+        case "$1" in
+            --type)
+                [[ $# -ge 2 ]] || { log error "--type requires all|error|access|admin|audit"; return "$EX_GENERAL"; }
+                FRM_LOG_TYPE="$2"
+                shift
+                ;;
+            --type=*)
+                FRM_LOG_TYPE="${1#*=}"
+                ;;
+            --tail)
+                [[ $# -ge 2 ]] || { log error "--tail requires a positive line count"; return "$EX_GENERAL"; }
+                is_positive_integer "$2" || { log error "Invalid tail count: $2"; return "$EX_GENERAL"; }
+                FRM_LOG_TAIL="$2"
+                shift
+                ;;
+            --tail=*)
+                FRM_LOG_TAIL="${1#*=}"
+                is_positive_integer "$FRM_LOG_TAIL" || { log error "Invalid tail count: $FRM_LOG_TAIL"; return "$EX_GENERAL"; }
+                ;;
+            --state)
+                [[ $# -ge 2 ]] || { log error "--state requires a state"; return "$EX_GENERAL"; }
+                add_state_filter "$2" || return $?
+                shift
+                ;;
+            --state=*) add_state_filter "${1#*=}" || return $? ;;
+            --all) LOG_SELECTORS=(--all) ;;
+            --help|-h)
+                show_help inspection
+                return 10
+                ;;
+            --) shift; LOG_SELECTORS+=("$@"); break ;;
+            -*) log error "Unknown logs option: $1"; return "$EX_GENERAL" ;;
+            *) LOG_SELECTORS+=("$1") ;;
+        esac
+        shift
+    done
+
+    case "$FRM_LOG_TYPE" in
+        all|error|access|admin|audit) ;;
+        *) log error "Invalid log type: $FRM_LOG_TYPE"; return "$EX_GENERAL" ;;
+    esac
+}
+
+parse_ports_args() {
+    PORT_SELECTORS=()
+
+    while (( $# )); do
+        case "$1" in
+            --verify)
+                FRM_PORTS_VERIFY=true
+                ;;
+            --state)
+                [[ $# -ge 2 ]] || { log error "--state requires a state"; return "$EX_GENERAL"; }
+                add_state_filter "$2" || return $?
+                shift
+                ;;
+            --state=*)
+                add_state_filter "${1#*=}" || return $?
+                ;;
+            --all) PORT_SELECTORS=(--all) ;;
+            --help|-h)
+                show_help inspection
+                return 10
+                ;;
+            --) shift; PORT_SELECTORS+=("$@"); break ;;
+            -*) log error "Unknown ports option: $1"; return "$EX_GENERAL" ;;
+            *) PORT_SELECTORS+=("$1") ;;
+        esac
+        shift
+    done
+}
+
 parse_plan_args() {
     PLAN_ACTION="${1:-}"
     [[ -n "$PLAN_ACTION" ]] || { log error "plan requires start|stop|restart"; return "$EX_GENERAL"; }
@@ -396,6 +510,11 @@ main() {
     case "$FRM_OPMN_MODE" in
         auto|all|ohs) ;;
         *) log error "Invalid OPMN mode: $FRM_OPMN_MODE"; return "$EX_GENERAL" ;;
+    esac
+
+    case "$FRM_ON_ERROR" in
+        auto|stop|continue) ;;
+        *) log error "Invalid on-error mode: $FRM_ON_ERROR"; return "$EX_GENERAL" ;;
     esac
 
     load_handlers_file
@@ -484,11 +603,25 @@ main() {
             ;;
 
         ports)
+            parse_ports_args "$@"; rc=$?
+            (( rc == 10 )) && return 0
+            (( rc != 0 )) && return "$rc"
+            ports_instances "${PORT_SELECTORS[@]}"
+            ;;
+
+        logs)
+            parse_logs_args "$@"; rc=$?
+            (( rc == 10 )) && return 0
+            (( rc != 0 )) && return "$rc"
+            logs_instances "${LOG_SELECTORS[@]}"
+            ;;
+
+        configtest)
             if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
                 show_help inspection
             else
                 parse_selector_args "$@" || return $?
-                ports_instances "${SELECTOR_ARGS[@]}"
+                configtest_instances "${SELECTOR_ARGS[@]}"
             fi
             ;;
 

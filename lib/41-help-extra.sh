@@ -41,6 +41,28 @@ Restart strategies:
                 before moving to the next (default)
   all-at-once   stop all selected instances, then start those stopped cleanly
 
+Failure policy:
+  --on-error auto       fail-fast for rolling restart; continue for start/stop
+                        and all-at-once recovery (default)
+  --on-error stop       stop scheduling new lifecycle work after a failure
+  --on-error continue   continue with later selected instances
+
+Rolling restart is fail-fast by default. If one instance cannot stop or cannot
+return RUNNING, FRM leaves later instances untouched and reports them SKIPPED.
+For all-at-once restart, FRM always attempts to restore every instance it
+successfully stopped, even when --on-error=stop is requested.
+
+Lifecycle summary is enabled by default and reports result, before/after state,
+old/new PID, final uptime and operation duration. Disable with
+--no-lifecycle-summary.
+
+Optional configuration preflight:
+  frm restart --preflight-configtest 'ohs_*'
+
+This runs the read-only configtest for every selected instance before any state
+change. It is opt-in because configtest command resolution must first be proven
+on each estate generation.
+
 Interactive safety:
   --confirm         one confirmation before the lifecycle operation starts
   --confirm-each    confirm each selected instance before changing it
@@ -69,6 +91,8 @@ Examples:
   frm restart ohs_jrv
   frm restart --confirm 'ohs_*'
   frm restart --confirm-each 'ohs_*'
+  frm restart --on-error continue 'ohs_*'
+  frm restart --preflight-configtest 'ohs_*'
   frm restart --step 'ohs_*'
   frm restart --strategy all-at-once --confirm 'ohs_*'
   frm --yes restart 'ohs_*'
@@ -99,8 +123,8 @@ help_inspection() {
 INSPECTION / DIAGNOSTICS
 
   frm inspect [selectors...]
-      Show family, normalized state, status backend, OPMN/systemd/SysV
-      availability and custom handler availability.
+      Show family, normalized state, status backend, uptime/started_at,
+      OPMN/systemd/SysV availability, custom handlers and detected NodeManager.
 
   frm processes|ps [selectors...]
       Show the attributed OHS master PID, worker count and relevant process
@@ -111,8 +135,22 @@ INSPECTION / DIAGNOSTICS
   frm ports [selectors...]
       OHS 11g: parse the OHS row from `opmnctl status -l`.
       OHS 12c: inventory unique active-looking `Listen` directives found under
-      the instance OHS configuration tree. This is configuration inventory,
-      not socket-owner validation.
+      the instance OHS configuration tree.
+
+  frm ports --verify [selectors...]
+      Correlate discovered ports with ss/netstat LISTEN sockets. When process
+      ownership is visible, verify that at least one listener PID belongs to
+      the selected OHS master/worker tree.
+
+  frm configtest [selectors...]
+      Read-only syntax check. FRM derives the live OHS executable and syntax-
+      affecting flags, adds a reliable instance httpd.conf when necessary, and
+      invokes -t. If it cannot resolve the command safely, it returns
+      UNAVAILABLE rather than guessing.
+
+  frm logs [--type all|error|access|admin|audit] [--tail N] [selectors...]
+      Read-only log discovery inside known instance-local roots. --tail selects
+      the newest matching file and prints N lines. No external paths are guessed.
 
   frm doctor
       Report FRM/Bash versions, dependencies, discovery, selected status
@@ -169,8 +207,8 @@ Preferred equivalent:
 Use `less -R`, not `less -r`, when only ANSI color sequences need preserving.
 
 Machine-readable status:
-  frm status --json
-  frm status --tsv
+  frm status --json    # includes uptime_seconds + started_at
+  frm status --tsv     # includes uptime_seconds + started_at
 
 Compact + aggregate summary:
   frm status --summary
@@ -198,6 +236,9 @@ Environment variables:
   FRM_POLL_INTERVAL     polling interval in seconds
   FRM_SUDO              auto|always|never
   FRM_OPMN_MODE         auto|all|ohs
+  FRM_ON_ERROR          auto|stop|continue
+  FRM_LIFECYCLE_SUMMARY true/false
+  FRM_PREFLIGHT_CONFIGTEST true/false
   FRM_INCLUDE_SKIPPED   true/false
   FRM_SKIP_WORDS        space-delimited replacement for default skip words
   FRM_LOCK_FILE         lifecycle lock path
@@ -236,6 +277,8 @@ Dry-run:
 Confirmations:
   frm restart --confirm 'ohs_*'
   frm restart --confirm-each 'ohs_*'
+  frm restart --on-error continue 'ohs_*'
+  frm restart --preflight-configtest 'ohs_*'
   frm stop --confirm-each 'ohs_*'
   frm start --confirm-each 'ohs_*'
 
@@ -274,7 +317,8 @@ OPMN modes:
 operation, so a rolling stopall is always paired with startall.
 
 Restart defaults to rolling mode so one instance is restored before FRM moves
-on to the next selected instance.
+on to the next selected instance. Rolling restart is fail-fast by default; use
+`--on-error continue` only when intentionally proceeding past a failed instance.
 EOF_HELP
 }
 
@@ -324,6 +368,8 @@ Lifecycle:
   frm --dry-run restart 'ohs_*'
   frm restart ohs_jrv ohs_lfr7
   frm restart --confirm-each 'ohs_*'
+  frm restart --on-error continue 'ohs_*'
+  frm restart --preflight-configtest 'ohs_*'
   frm stop --confirm-each 'ohs_*'
   frm restart --strategy all-at-once --confirm 'ohs_*'
   frm --timeout 120 --poll-interval 1 restart ohs_jrv
@@ -336,6 +382,9 @@ Diagnostics:
   frm inspect ohs_jrv
   frm processes ohs_jrv
   frm ports ohs_jrv
+  frm ports --verify ohs_jrv
+  frm configtest ohs_jrv
+  frm logs --type error --tail 100 ohs_jrv
   frm doctor
   frm --debug status
 
