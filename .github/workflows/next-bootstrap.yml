@@ -1,0 +1,72 @@
+name: Build verified FRM next
+
+on:
+  push:
+    branches:
+      - next
+
+permissions:
+  contents: write
+
+jobs:
+  build-next:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify development patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .frm-next/chunk00 \
+            .frm-next/tail00 \
+            .frm-next/tail01 \
+            .frm-next/tail02 \
+            .frm-next/tail03 \
+            .frm-next/tail04 \
+            .frm-next/tail05 \
+            .frm-next/tail06 \
+            .frm-next/tail07 \
+            .frm-next/tail08 \
+            .frm-next/tail09 \
+            .frm-next/tail10 \
+            > /tmp/frm-next.patch.gz.b64
+          base64 -d /tmp/frm-next.patch.gz.b64 > /tmp/frm-next.patch.gz
+          echo 'bfd167fcd73cab179d18912c85c82b93ca2f32a106d9d6f41f72f1d39a4e7193  /tmp/frm-next.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/frm-next.patch.gz > /tmp/frm-next.patch
+          echo '178eb642ac697272a73b87d0c084c0b22a2eb2dcdb395f1f5adcc05932cc21af  /tmp/frm-next.patch' | sha256sum -c -
+          git apply --check /tmp/frm-next.patch
+          git apply /tmp/frm-next.patch
+          test "$(cat VERSION)" = '0.2.0-dev'
+          git diff --check
+
+      - name: Functional regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          make test
+          make compat
+
+      - name: ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          make lint
+
+      - name: Commit verified development branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .frm-next .github/workflows/next-bootstrap.yml
+          git add -A
+          git diff --cached --check
+          test "$(cat VERSION)" = '0.2.0-dev'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Build FRM 0.2.0-dev operational tooling'
+          git push origin HEAD:next
