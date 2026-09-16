@@ -1,4 +1,4 @@
-name: Maintainer source snapshot
+name: Maintainer legacy interpreter
 on:
   push:
     branches: [maintenance/source-snapshot]
@@ -6,21 +6,35 @@ permissions:
   contents: read
 jobs:
   snapshot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: df00e11fa7d0872d1b4afdaf81ea77f39351363d
-          fetch-depth: 0
-      - name: Export exact development source
+      - name: Obtain GNU Bash 4.2 and official patch series
+        shell: bash
         run: |
-          mkdir -p export
-          git archive --format=tar.gz HEAD > export/frm-next-source.tar.gz
-          git bundle create export/frm-next.bundle --all
-          cp /usr/bin/shellcheck export/shellcheck
-          (cd export && sha256sum * > SHA256SUMS)
+          set -euo pipefail
+          mkdir -p export patches
+          curl --fail --location --retry 2 --max-time 90 https://ftp.gnu.org/gnu/bash/bash-4.2.tar.gz -o export/bash-4.2.tar.gz
+          tar -xzf export/bash-4.2.tar.gz
+          for n in $(seq 1 53); do
+            name=$(printf 'bash42-%03d' "$n")
+            curl --fail --location --silent --show-error --retry 2 --max-time 45 "https://ftp.gnu.org/gnu/bash/bash-4.2-patches/$name" -o "patches/$name"
+            (cd bash-4.2 && patch -p0 < "../patches/$name")
+          done
+          tar -czf export/bash-4.2-official-patches.tar.gz patches
+      - name: Build isolated test interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd bash-4.2
+          CFLAGS='-O2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types -Wno-error=int-conversion' ./configure --without-bash-malloc --disable-nls
+          make -j2
+          ./bash --version
+          cp bash ../export/bash-4.2.53
+          cd ../export
+          sha256sum * > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: frm-maintainer-source
+          name: frm-legacy-bash-test-only
           path: export/
           retention-days: 3
