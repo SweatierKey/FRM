@@ -296,6 +296,11 @@ process time from that master PID and exposes it as `uptime`. This is deliberate
 independent from systemd's service age, because SysV-generated units commonly remain
 `active (exited)` long after the actual OHS process has been restarted.
 
+For portability across older RHEL/procps versions, elapsed time is resolved through a
+fallback chain: numeric `ps etimes`, then `ps etime` (`[[dd-]hh:]mm:ss`), then Linux
+`/proc/<pid>/stat` plus `/proc/uptime`. The displayed value and `uptime_seconds` therefore
+remain available even on hosts whose `ps` does not implement `etimes`.
+
 ## Structured output
 
 JSON:

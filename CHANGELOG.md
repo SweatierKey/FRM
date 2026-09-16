@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.4 - 2026-09-16
+
+### Fixed
+
+- Make OHS process uptime portable across older RHEL/procps versions. FRM now
+  prefers numeric `ps etimes`, falls back to the widely available `ps etime`
+  format (`[[dd-]hh:]mm:ss`), and finally derives elapsed runtime from Linux
+  `/proc/<pid>/stat` plus `/proc/uptime` when neither ps field is usable.
+- This fixes missing `uptime=` on hosts where status and PID detection worked
+  correctly but the installed `ps` did not expose `etimes`, including mixed
+  OHS 11g/OPMN and OHS 12c estates.
+
+### Tests
+
+- Add regression coverage for `etime` fallback, day-prefixed elapsed times and
+  the Linux `/proc` fallback.
+- Regression suite: 58 tests, also exercised with `BASH_COMPAT=4.2`.
+
 ## 0.1.3 - 2026-09-16
 
 ### Added

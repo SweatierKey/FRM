@@ -88,16 +88,108 @@ set_process_status() {
     return 1
 }
 
+parse_ps_etime_seconds() {
+    local value="${1:-}"
+    local days=0
+    local hours=0
+    local minutes=0
+    local seconds=0
+    local rest=""
+    local -a parts=()
+
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
+    [[ -n "$value" ]] || return 1
+
+    if [[ "$value" == *-* ]]; then
+        days="${value%%-*}"
+        rest="${value#*-}"
+        [[ "$days" =~ ^[0-9]+$ ]] || return 1
+    else
+        rest="$value"
+    fi
+
+    IFS=':' read -r -a parts <<< "$rest"
+
+    case "${#parts[@]}" in
+        2)
+            minutes="${parts[0]}"
+            seconds="${parts[1]}"
+            ;;
+        3)
+            hours="${parts[0]}"
+            minutes="${parts[1]}"
+            seconds="${parts[2]}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    [[ "$hours" =~ ^[0-9]+$ ]] || return 1
+    [[ "$minutes" =~ ^[0-9]+$ ]] || return 1
+    [[ "$seconds" =~ ^[0-9]+$ ]] || return 1
+
+    printf '%d\n' "$((10#$days * 86400 + 10#$hours * 3600 + 10#$minutes * 60 + 10#$seconds))"
+}
+
+process_uptime_seconds_procfs() {
+    local pid="$1"
+    local proc_root="${FRM_PROC_ROOT:-/proc}"
+    local stat_line=""
+    local stat_tail=""
+    local start_ticks=""
+    local hz=""
+    local host_uptime=""
+    local start_seconds=""
+    local elapsed=""
+    local -a fields=()
+
+    [[ -r "$proc_root/$pid/stat" && -r "$proc_root/uptime" ]] || return 1
+
+    stat_line="$(<"$proc_root/$pid/stat")" || return 1
+    stat_tail="${stat_line##*) }"
+    read -r -a fields <<< "$stat_tail"
+
+    # /proc/<pid>/stat field 22 is starttime. After stripping pid + comm,
+    # the remaining array begins at field 3, so starttime is index 19.
+    start_ticks="${fields[19]:-}"
+    [[ "$start_ticks" =~ ^[0-9]+$ ]] || return 1
+
+    hz="$(getconf CLK_TCK 2>/dev/null)"
+    [[ "$hz" =~ ^[0-9]+$ && "$hz" -gt 0 ]] || return 1
+
+    host_uptime="$(awk 'NR == 1 { print int($1); exit }' "$proc_root/uptime" 2>/dev/null)"
+    [[ "$host_uptime" =~ ^[0-9]+$ ]] || return 1
+
+    start_seconds=$((start_ticks / hz))
+    elapsed=$((host_uptime - start_seconds))
+    (( elapsed >= 0 )) || return 1
+
+    printf '%s\n' "$elapsed"
+}
+
 process_uptime_seconds() {
     local pid="$1"
     local value=""
 
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
 
+    # procps-ng supports etimes on newer hosts, but older RHEL/procps builds
+    # may not. Prefer the numeric field when available, then fall back to the
+    # portable elapsed-time string, and finally Linux /proc timing data.
     value="$(ps -o etimes= -p "$pid" 2>/dev/null | awk 'NR == 1 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); print; exit }')"
-    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        printf '%s\n' "$value"
+        return 0
+    fi
 
-    printf '%s\n' "$value"
+    value="$(ps -o etime= -p "$pid" 2>/dev/null | awk 'NR == 1 { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); print; exit }')"
+    if parse_ps_etime_seconds "$value"; then
+        return 0
+    fi
+
+    process_uptime_seconds_procfs "$pid"
 }
 
 format_uptime() {

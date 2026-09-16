@@ -1,6 +1,6 @@
 set -o pipefail
 
-FRM_VERSION="0.1.3"
+FRM_VERSION="0.1.4"
 
 ###############################################################################
 # Defaults / environment

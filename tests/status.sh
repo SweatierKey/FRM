@@ -228,6 +228,40 @@ test_process_uptime_uses_master_pid() (
     [[ "$(process_uptime_seconds 4242)" == "277" ]]
 )
 
+
+test_process_uptime_falls_back_to_etime() (
+    source "$FRM"
+    ps() {
+        if [[ "$*" == *"-o etimes="* ]]; then
+            return 1
+        fi
+        if [[ "$*" == *"-o etime="* && "$*" == *"-p 4242"* ]]; then
+            printf '  01:02:03\n'
+            return 0
+        fi
+        return 1
+    }
+    [[ "$(process_uptime_seconds 4242)" == "3723" ]]
+)
+
+
+test_ps_etime_parser_supports_days() (
+    source "$FRM"
+    [[ "$(parse_ps_etime_seconds '2-03:04:05')" == "183845" ]]
+    [[ "$(parse_ps_etime_seconds '04:05')" == "245" ]]
+)
+
+
+test_process_uptime_falls_back_to_procfs() (
+    source "$FRM"
+    ps() { return 1; }
+    process_uptime_seconds_procfs() {
+        [[ "$1" == "4242" ]] || return 1
+        printf '99\n'
+    }
+    [[ "$(process_uptime_seconds 4242)" == "99" ]]
+)
+
 test_status_table_includes_uptime() (
     source "$FRM"
     local out
@@ -281,5 +315,8 @@ run_test '12c process detection forces wide ps output' test_process_detection_12
 run_test '11g httpd.worker process detection' test_process_detection_11g
 run_test 'uptime formatting' test_uptime_formatting
 run_test 'process uptime uses master pid' test_process_uptime_uses_master_pid
+run_test 'process uptime falls back to etime' test_process_uptime_falls_back_to_etime
+run_test 'ps etime parser supports days' test_ps_etime_parser_supports_days
+run_test 'process uptime falls back to procfs' test_process_uptime_falls_back_to_procfs
 run_test 'status table includes uptime' test_status_table_includes_uptime
 run_test 'JSON status output' test_status_json
